@@ -6,210 +6,39 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <title>lain slasher</title>
+    <title>lain slasher redirect</title>
+    <script>
+      (() => {
+        const nextUrl = new URL('./slasher/', window.location.href);
+        const params = new URLSearchParams(window.location.search);
+        params.delete('mode');
+        nextUrl.search = params.toString();
+        nextUrl.hash = window.location.hash;
+        window.location.replace(nextUrl.toString());
+      })();
+    </script>
     <style>
-      :root {
-        color-scheme: dark;
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #050305;
+        color: #ffe7df;
         font-family: Arial, sans-serif;
       }
 
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      html,
       body {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #000;
-      }
-
-      body {
-        position: relative;
-        touch-action: manipulation;
-      }
-
-      #renderCanvas {
-        display: block;
-        width: 100vw;
-        height: 100vh;
-        touch-action: none;
-        image-rendering: pixelated;
-      }
-
-      #mode-chip,
-      #hint,
-      #hud {
-        position: fixed;
-        z-index: 30;
-        color: #cc2200;
-        font-size: 10px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        text-shadow: 0 0 6px #cc2200;
-        pointer-events: none;
-      }
-
-      #mode-chip {
-        top: 16px;
-        left: 16px;
-      }
-
-      #hint {
-        top: 34px;
-        left: 16px;
-        max-width: min(78vw, 360px);
-        opacity: 0.8;
-      }
-
-      #hud {
-        bottom: 16px;
-        left: 16px;
-      }
-
-      #scanlines,
-      #vignette,
-      #glitchFlash,
-      #dmgFlash,
-      #hitFlash {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-      }
-
-      #scanlines {
-        z-index: 20;
-        background: repeating-linear-gradient(
-          0deg,
-          rgba(0, 0, 0, 0.12) 0px,
-          rgba(0, 0, 0, 0.12) 1px,
-          transparent 1px,
-          transparent 3px
-        );
-      }
-
-      #vignette {
-        z-index: 21;
-        background: radial-gradient(
-          ellipse at center,
-          transparent 30%,
-          rgba(0, 0, 0, 0.85) 100%
-        );
-      }
-
-      #glitchFlash {
-        z-index: 15;
-        background: transparent;
-        mix-blend-mode: screen;
-      }
-
-      #dmgFlash {
-        z-index: 14;
-        background: rgba(200, 0, 0, 0);
-      }
-
-      #hitFlash {
-        z-index: 16;
-        background: transparent;
-      }
-
-      #touch-controls {
-        position: fixed;
-        inset: auto 16px 20px 16px;
-        z-index: 40;
-        display: none;
-        align-items: end;
-        justify-content: space-between;
-        gap: 16px;
-        pointer-events: none;
-      }
-
-      body[data-touch='true'] #touch-controls {
-        display: flex;
-      }
-
-      #dpad {
         display: grid;
-        grid-template-columns: repeat(3, 56px);
-        grid-template-rows: repeat(3, 56px);
-        gap: 8px;
-        pointer-events: auto;
+        place-items: center;
+        padding: 24px;
       }
 
-      .touch-button {
-        border: 1px solid rgba(255, 110, 57, 0.45);
-        border-radius: 18px;
-        background: rgba(15, 6, 9, 0.72);
-        color: #ffd3c1;
-        font-size: 20px;
-        font-weight: 700;
-        backdrop-filter: blur(8px);
-        box-shadow: 0 0 18px rgba(138, 29, 6, 0.25);
-        user-select: none;
-        -webkit-user-select: none;
-      }
-
-      .touch-button[data-active='true'] {
-        background: rgba(58, 12, 12, 0.88);
-        color: #fff4ec;
-        transform: scale(0.97);
-      }
-
-      .dpad-up {
-        grid-column: 2;
-        grid-row: 1;
-      }
-
-      .dpad-left {
-        grid-column: 1;
-        grid-row: 2;
-      }
-
-      .dpad-down {
-        grid-column: 2;
-        grid-row: 3;
-      }
-
-      .dpad-right {
-        grid-column: 3;
-        grid-row: 2;
-      }
-
-      #attack-button {
-        width: 104px;
-        height: 104px;
-        border-radius: 999px;
-        font-size: 16px;
-        letter-spacing: 1px;
-        pointer-events: auto;
+      a {
+        color: inherit;
       }
     </style>
   </head>
   <body>
-    <div id="mode-chip">mode: slasher</div>
-    <div id="hint">wasd / d-pad to move, tap / click / space to slash</div>
-    <canvas id="renderCanvas"></canvas>
-    <div id="scanlines"></div>
-    <div id="vignette"></div>
-    <div id="hud">HP 100 // KILLS 0 // FPS --</div>
-    <div id="glitchFlash"></div>
-    <div id="dmgFlash"></div>
-    <div id="hitFlash"></div>
-    <div id="touch-controls" aria-hidden="true">
-      <div id="dpad">
-        <button class="touch-button dpad-up" data-key="KeyW" type="button">▲</button>
-        <button class="touch-button dpad-left" data-key="KeyA" type="button">◀</button>
-        <button class="touch-button dpad-down" data-key="KeyS" type="button">▼</button>
-        <button class="touch-button dpad-right" data-key="KeyD" type="button">▶</button>
-      </div>
-      <button class="touch-button" id="attack-button" type="button">SLASH</button>
-    </div>
-    <audio id="bgm" loop playsinline></audio>
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="./engine/sprite.js"></script>
-    <script src="./slasher.js"></script>
+    <p>Redirecting to the canonical slasher route. If nothing happens, open <a href="./slasher/">/slasher/</a>.</p>
   </body>
 </html>

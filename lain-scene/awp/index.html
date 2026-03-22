@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>lain awp</title>
+    <base href="../" />
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+
+        if (params.get('mode') === 'slasher') {
+          const nextUrl = new URL('./slasher/', document.baseURI);
+          const nextSearch = new URLSearchParams(params);
+          nextSearch.delete('mode');
+          nextUrl.search = nextSearch.toString();
+          nextUrl.hash = window.location.hash;
+          window.location.replace(nextUrl.toString());
+          return;
+        }
+
+        if (params.has('mode')) {
+          const cleanedUrl = new URL(window.location.href);
+          params.delete('mode');
+          cleanedUrl.search = params.toString();
+          history.replaceState(null, '', cleanedUrl.toString());
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./mode-switcher.css" />
+  </head>
+  <body data-scene-mode="awp">
+    <nav class="mode-switcher" aria-label="Scene mode switcher">
+      <a class="mode-link" data-target-mode="awp" href="./awp/">
+        <span class="mode-link__title">AWP</span>
+        <span class="mode-link__subtitle">long range</span>
+      </a>
+      <a class="mode-link" data-target-mode="slasher" href="./slasher/">
+        <span class="mode-link__title">Slasher</span>
+        <span class="mode-link__subtitle">close range</span>
+      </a>
+    </nav>
+    <div class="route-transition" aria-hidden="true"></div>
+
+    <div id="hud">
+      <div id="mode-chip"></div>
+      <div id="hint">tap / click / space</div>
+      <div id="score">score: 0</div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="weapon-overlay" class="idle"></div>
+    <canvas id="renderCanvas"></canvas>
+    <audio id="bgm" loop playsinline></audio>
+    <script src="./mode-switcher.js"></script>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>

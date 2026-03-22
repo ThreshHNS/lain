@@ -6,32 +6,134 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <title>lain scene</title>
+    <title>lain scene router</title>
     <script>
       (() => {
         const params = new URLSearchParams(window.location.search);
-
-        if (params.get('mode') === 'slasher') {
-          const nextUrl = new URL('./slasher.html', window.location.href);
-          nextUrl.search = window.location.search;
-          nextUrl.hash = window.location.hash;
-          window.location.replace(nextUrl.toString());
-        }
+        const nextUrl = new URL(params.get('mode') === 'slasher' ? './slasher/' : './awp/', window.location.href);
+        const nextSearch = new URLSearchParams(params);
+        nextSearch.delete('mode');
+        nextUrl.search = nextSearch.toString();
+        nextUrl.hash = window.location.hash;
+        window.location.replace(nextUrl.toString());
       })();
     </script>
-    <link rel="stylesheet" href="./styles.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Arial Narrow", Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top, rgba(255, 162, 103, 0.22), transparent 34%),
+          linear-gradient(180deg, #20151c 0%, #080607 100%);
+        color: #fff1e6;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .router-shell {
+        width: min(560px, 100%);
+        padding: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 28px;
+        background: rgba(12, 9, 11, 0.72);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.36);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: #d2b9a7;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(32px, 7vw, 56px);
+        line-height: 0.95;
+      }
+
+      p {
+        margin: 0;
+        color: #c1ada1;
+        line-height: 1.5;
+      }
+
+      .links {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .links a {
+        padding: 16px 18px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 18px;
+        color: inherit;
+        text-decoration: none;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+      }
+
+      .links strong,
+      .links span {
+        display: block;
+      }
+
+      .links strong {
+        margin-bottom: 4px;
+        font-size: 15px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+
+      .links span {
+        color: #b29f94;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      @media (max-width: 640px) {
+        .links {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="hud">
-      <div id="mode-chip"></div>
-      <div id="hint">tap / click / space</div>
-      <div id="score">score: 0</div>
-    </div>
-    <div id="crosshair"></div>
-    <div id="weapon-overlay" class="idle"></div>
-    <canvas id="renderCanvas"></canvas>
-    <audio id="bgm" loop playsinline></audio>
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="./main.js"></script>
+    <main class="router-shell">
+      <p class="eyebrow">lain / scene router</p>
+      <h1>Choose a mode.</h1>
+      <p>
+        JavaScript should forward this page to the correct scene automatically. If it does not,
+        use one of the direct links below.
+      </p>
+      <div class="links">
+        <a href="./awp/">
+          <strong>AWP</strong>
+          <span>long range</span>
+        </a>
+        <a href="./slasher/">
+          <strong>Slasher</strong>
+          <span>close range</span>
+        </a>
+      </div>
+    </main>
   </body>
 </html>
