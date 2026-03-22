@@ -1,5 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SymbolView } from 'expo-symbols';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -12,6 +13,7 @@ import {
   Mode,
   resolveMode,
 } from '@/lib/scene-config';
+import AppHeader from '@/components/app-header';
 
 type SceneBridgeState = {
   assetState?: string;
@@ -79,6 +81,10 @@ export default function GameScreen() {
     }
   }, []);
 
+  const handleVoiceCaptured = useCallback((uri: string) => {
+    console.log('cues voice from game screen', uri);
+  }, []);
+
   return (
     <>
       <Stack.Screen
@@ -88,16 +94,27 @@ export default function GameScreen() {
           headerShadowVisible: false,
           headerTransparent: true,
           headerRight: () => (
-            <Pressable onPress={() => router.back()} testID="game-close-button">
-              <GlassSurface interactive style={styles.closeButton}>
-                <Text style={styles.closeLabel}>Close</Text>
-              </GlassSurface>
+            <Pressable
+              accessibilityLabel="close game"
+              accessibilityRole="button"
+              accessible
+              hitSlop={8}
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
+              testID="game-close-button">
+              <SymbolView
+                name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                size={16}
+                tintColor="#fff7f1"
+                weight="bold"
+              />
             </Pressable>
           ),
         }}
       />
       <View style={styles.container} testID="game-screen">
         <StatusBar style="light" />
+        <AppHeader sceneTitle={scene.label} onVoiceCaptured={handleVoiceCaptured} />
         <SceneFrame
           interactive
           onFrameMessage={handleFrameMessage}
@@ -107,26 +124,44 @@ export default function GameScreen() {
         {E2E_DEBUG_ENABLED ? (
           <View pointerEvents="none" style={styles.debugRail}>
             <GlassSurface style={styles.debugPanel}>
-              <Text style={styles.debugLabel} testID={`scene-debug-mode-${debugTokens.mode}`}>
+              <Text
+                accessibilityLabel={`scene-debug-mode-${debugTokens.mode}`}
+                accessible
+                style={styles.debugLabel}
+                testID={`scene-debug-mode-${debugTokens.mode}`}>
                 mode {debugTokens.mode}
               </Text>
-              <Text style={styles.debugLabel} testID={`scene-debug-audio-${debugTokens.audio}`}>
+              <Text
+                accessibilityLabel={`scene-debug-audio-${debugTokens.audio}`}
+                accessible
+                style={styles.debugLabel}
+                testID={`scene-debug-audio-${debugTokens.audio}`}>
                 audio {debugTokens.audio}
               </Text>
-              <Text style={styles.debugLabel} testID={`scene-debug-asset-${debugTokens.asset}`}>
+              <Text
+                accessibilityLabel={`scene-debug-asset-${debugTokens.asset}`}
+                accessible
+                style={styles.debugLabel}
+                testID={`scene-debug-asset-${debugTokens.asset}`}>
                 asset {debugTokens.asset}
               </Text>
               <Text
+                accessibilityLabel={`scene-debug-target-${debugTokens.target}`}
+                accessible
                 style={styles.debugLabel}
                 testID={`scene-debug-target-${debugTokens.target}`}>
                 target {debugTokens.target}
               </Text>
               <Text
+                accessibilityLabel={`scene-debug-action-${debugTokens.action}`}
+                accessible
                 style={styles.debugLabel}
                 testID={`scene-debug-action-${debugTokens.action}`}>
                 action {debugTokens.action}
               </Text>
               <Text
+                accessibilityLabel={`scene-debug-invalid-mode-${debugTokens.invalidModeFallback}`}
+                accessible
                 style={styles.debugLabel}
                 testID={`scene-debug-invalid-mode-${debugTokens.invalidModeFallback}`}>
                 invalid {debugTokens.invalidModeFallback}
@@ -145,15 +180,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#050608',
   },
   closeButton: {
+    alignItems: 'center',
     borderRadius: 999,
-    minWidth: 84,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
   },
-  closeLabel: {
-    color: '#fff7f1',
-    fontSize: 15,
-    fontWeight: '700',
+  closeButtonPressed: {
+    opacity: 0.72,
   },
   debugRail: {
     bottom: 20,
