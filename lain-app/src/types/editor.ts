@@ -15,3 +15,17 @@ export type HistoryEntry = {
   slot?: SlotHint;
   type: 'voice' | 'text' | 'photo' | 'asset';
 };
+
+export type AssetSourceType = 'google_drive' | 'poly_pizza' | 'sketchfab' | 'upload';
+
+export type AssetReference = {
+  id: string;
+  name: string;
+  source: AssetSourceType;
+  license: string;
+  url: string;
+  thumbnail?: string;
+  slot?: SlotHint;
+  metadata?: Record<string, unknown>;
+  updatedAt: string;
+};

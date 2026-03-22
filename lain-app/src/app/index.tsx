@@ -20,10 +20,30 @@ import {
   Mode,
 } from '@/lib/scene-config';
 import AppHeader from '@/components/app-header';
-import type { SlotHint } from '@/types/editor';
+import AssetPicker from '@/components/asset-picker';
+import HistoryPanel from '@/components/history-panel';
+import type { HistoryEntry, SlotHint } from '@/types/editor';
 import AppHeader from '@/components/app-header';
 
 const E2E_DEBUG_ENABLED = process.env.EXPO_PUBLIC_E2E_DEBUG === '1';
+
+const HISTORY_ENTRIES: HistoryEntry[] = [
+  {
+    id: 'history-1',
+    actor: { id: 'u1', name: 'Lain', isOnline: true },
+    timestamp: new Date().toISOString(),
+    label: 'Voice prompt calibrated for walk slot',
+    slot: 'walk',
+    type: 'voice',
+  },
+  {
+    id: 'history-2',
+    actor: { id: 'u3', name: 'Codex', isOnline: true },
+    timestamp: new Date(Date.now() - 45 * 60000).toISOString(),
+    label: 'Added PolyPizza corridor asset',
+    type: 'asset',
+  },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -75,6 +95,8 @@ export default function HomeScreen() {
     <View style={styles.container} testID="scene-feed-screen">
       <StatusBar style="light" />
       <AppHeader sceneTitle="Scene selector" onVoiceCaptured={handleVoiceCaptured} />
+      <HistoryPanel entries={HISTORY_ENTRIES} />
+      <AssetPicker />
 
       <FlatList
         contentInsetAdjustmentBehavior="never"
