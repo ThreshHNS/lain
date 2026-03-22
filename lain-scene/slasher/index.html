@@ -7,13 +7,12 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>lain slasher</title>
-    <base href="../" />
     <script>
       (() => {
         const params = new URLSearchParams(window.location.search);
 
         if (params.get('mode') === 'awp') {
-          const nextUrl = new URL('./awp/', document.baseURI);
+          const nextUrl = new URL('../awp/', window.location.href);
           const nextSearch = new URLSearchParams(params);
           nextSearch.delete('mode');
           nextUrl.search = nextSearch.toString();
@@ -30,7 +29,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="./mode-switcher.css" />
+    <link rel="stylesheet" href="../mode-switcher.css" />
     <style>
       :root {
         color-scheme: dark;
@@ -212,7 +211,7 @@
       }
     </style>
   </head>
-  <body data-scene-mode="slasher">
+  <body data-scene-mode="slasher" data-scene-root="../">
     <nav class="mode-switcher" aria-label="Scene mode switcher">
       <a class="mode-link" data-target-mode="awp" href="./awp/">
         <span class="mode-link__title">AWP</span>
@@ -244,9 +243,9 @@
       <button class="touch-button" id="attack-button" type="button">SLASH</button>
     </div>
     <audio id="bgm" loop playsinline></audio>
-    <script src="./mode-switcher.js"></script>
+    <script src="../mode-switcher.js"></script>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="./engine/sprite.js"></script>
-    <script src="./slasher.js"></script>
+    <script src="./main.js"></script>
   </body>
 </html>

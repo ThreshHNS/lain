@@ -1,5 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const ATTACK_CODES = new Set(['Space', 'Enter', 'NumpadEnter']);
+const staticScene = params.get('still') === '1';
 
 function createToneObjectUrl(frequency) {
   const sampleRate = 22050;
@@ -42,6 +43,7 @@ function createToneObjectUrl(frequency) {
   return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
 }
 
+const body = document.body;
 const canvas = document.getElementById('renderCanvas');
 const hudElement = document.getElementById('hud');
 const scanlinesElement = document.getElementById('scanlines');
@@ -51,6 +53,12 @@ const hitFlashElement = document.getElementById('hitFlash');
 const attackButton = document.getElementById('attack-button');
 const dpadButtons = Array.from(document.querySelectorAll('[data-key]'));
 const bgm = document.getElementById('bgm');
+let audioState = 'idle';
+let audioUnlockCount = 0;
+let frameP95 = 0;
+let lastAction = 'boot';
+let lastPostedPayload = '';
+const frameSamples = [];
 
 const generatedMusicUrl = params.get('slasherMusic') || createToneObjectUrl(145);
 const enableTouchControls = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -60,13 +68,72 @@ document.body.dataset.touch = String(enableTouchControls);
 bgm.loop = true;
 bgm.volume = 0.22;
 bgm.src = generatedMusicUrl;
+bgm.addEventListener('canplaythrough', () => {
+  audioState = 'ready';
+  syncDebugState();
+});
+bgm.addEventListener('play', () => {
+  audioState = 'playing';
+  syncDebugState();
+});
+bgm.addEventListener('pause', () => {
+  if (audioState !== 'error') {
+    audioState = 'paused';
+    syncDebugState();
+  }
+});
+bgm.addEventListener('error', () => {
+  audioState = 'error';
+  lastAction = 'audio-error';
+  syncDebugState();
+});
+
+function snapshotState() {
+  return {
+    audioState,
+    audioUnlockCount,
+    enemyCount: enemies.length,
+    frameP95,
+    isAttacking,
+    kills,
+    lastAction,
+    mode: 'slasher',
+    playerHp,
+    staticScene,
+    targetState: kills > 0 ? 'dead' : enemies.some(enemy => !enemy.dead) ? 'alive' : 'missing',
+  };
+}
+
+function syncDebugState() {
+  body.dataset.audioState = audioState;
+  body.dataset.kills = String(kills);
+  body.dataset.lastAction = lastAction;
+  body.dataset.mode = 'slasher';
+  body.dataset.staticScene = String(staticScene);
+  body.dataset.targetState = kills > 0 ? 'dead' : enemies.some(enemy => !enemy.dead) ? 'alive' : 'missing';
+  body.dataset.frameP95 = String(frameP95);
+
+  if (window.ReactNativeWebView?.postMessage) {
+    const payload = JSON.stringify({ state: snapshotState(), type: 'scene-state' });
+    if (payload !== lastPostedPayload) {
+      lastPostedPayload = payload;
+      window.ReactNativeWebView.postMessage(payload);
+    }
+  }
+}
 
 function unlockAudio() {
+  audioUnlockCount += 1;
   if (!bgm.paused) {
+    syncDebugState();
     return;
   }
 
-  bgm.play().catch(() => {});
+  bgm.play().catch(() => {
+    audioState = 'blocked';
+    syncDebugState();
+  });
+  syncDebugState();
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -259,8 +326,8 @@ function randomSpawnPosition() {
   return [Math.max(-27, Math.min(27, x)), Math.max(-27, Math.min(27, z))];
 }
 
-function spawnEnemy(x, z) {
-  const typeName = Math.random() < 0.5 ? 'eretic' : 'dog';
+function spawnEnemy(x, z, forcedTypeName) {
+  const typeName = forcedTypeName || (Math.random() < 0.5 ? 'eretic' : 'dog');
   const config = enemyTypes[typeName];
   const enemySprite = PSXSprite(scene, {
     anims: config.anims,
@@ -323,6 +390,7 @@ function startAttack() {
     return;
   }
 
+  lastAction = 'slash-start';
   isAttacking = true;
   attackTimer = 0;
   player.play('attack', 14);
@@ -392,7 +460,9 @@ function startAttack() {
     triggerGlitch(0.6);
   });
 
+  lastAction = didHit ? 'slash-hit' : 'slash-whiff';
   triggerHitFlash(didHit ? 1.0 : 0.3);
+  syncDebugState();
 }
 
 function updateTouchButtonState(key, pressed) {
@@ -448,6 +518,10 @@ window.addEventListener('keydown', event => {
   }
 
   keys[event.code] = true;
+  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD') {
+    lastAction = 'move-input';
+    syncDebugState();
+  }
 });
 
 window.addEventListener('keyup', event => {
@@ -476,7 +550,11 @@ pipeline.grainEnabled = true;
 pipeline.grain.intensity = 25;
 pipeline.grain.animated = true;
 
-spawnWave();
+if (staticScene) {
+  spawnEnemy(2.2, 0, 'dog');
+} else {
+  spawnWave();
+}
 
 let elapsedSeconds = 0;
 
@@ -558,7 +636,7 @@ scene.registerBeforeRender(() => {
   playerLight.range = 9 + Math.sin(elapsedSeconds * 3) * 1.5;
 
   spawnTimer += deltaMs;
-  if (spawnTimer >= spawnInterval) {
+  if (!staticScene && spawnTimer >= spawnInterval) {
     spawnTimer = 0;
     spawnWave();
   }
@@ -581,6 +659,11 @@ scene.registerBeforeRender(() => {
         continue;
       }
 
+      enemy.sprite.update(deltaMs, camera);
+      continue;
+    }
+
+    if (staticScene) {
       enemy.sprite.update(deltaMs, camera);
       continue;
     }
@@ -678,7 +761,17 @@ scene.registerBeforeRender(() => {
     damageFlashElement.style.background = `rgba(180, 0, 0, ${damageFade.toFixed(3)})`;
   }
 
+  frameSamples.push(deltaMs);
+  if (frameSamples.length > 180) {
+    frameSamples.shift();
+  }
+  if (frameSamples.length >= 30) {
+    const sorted = [...frameSamples].sort((left, right) => left - right);
+    frameP95 = Math.round(sorted[Math.floor(sorted.length * 0.95)]);
+  }
+
   hudElement.textContent = `HP ${playerHp} // KILLS ${kills} // FPS ${Math.round(engine.getFps())}`;
+  syncDebugState();
 });
 
 engine.runRenderLoop(() => scene.render());
@@ -687,12 +780,8 @@ window.addEventListener('resize', () => engine.resize());
 window.__lainTestApi = {
   getState() {
     return {
-      enemyCount: enemies.length,
+      ...snapshotState(),
       frame: Math.round(engine.getFps()),
-      isAttacking,
-      kills,
-      mode: 'slasher',
-      playerHp,
       playerPosition: {
         x: Number(player.spr.position.x.toFixed(3)),
         y: Number(player.spr.position.y.toFixed(3)),
@@ -702,10 +791,19 @@ window.__lainTestApi = {
   },
   setKey(code, pressed) {
     keys[code] = pressed;
+    syncDebugState();
+  },
+  holdAttack(duration = 800) {
+    return new Promise(resolve => {
+      startAttack();
+      window.setTimeout(() => resolve(snapshotState()), duration);
+    });
   },
   startAttack,
   unlockAudio,
 };
+
+syncDebugState();
 
 window.addEventListener('pagehide', () => {
   if (!params.get('slasherMusic')) {
