@@ -13,7 +13,6 @@ import {
   Mode,
   resolveMode,
 } from '@/lib/scene-config';
-import AppHeader from '@/components/app-header';
 
 type SceneBridgeState = {
   assetState?: string;
@@ -81,10 +80,6 @@ export default function GameScreen() {
     }
   }, []);
 
-  const handleVoiceCaptured = useCallback((uri: string) => {
-    console.log('cues voice from game screen', uri);
-  }, []);
-
   return (
     <>
       <Stack.Screen
@@ -94,27 +89,49 @@ export default function GameScreen() {
           headerShadowVisible: false,
           headerTransparent: true,
           headerRight: () => (
-            <Pressable
-              accessibilityLabel="close game"
-              accessibilityRole="button"
-              accessible
-              hitSlop={8}
-              onPress={() => router.back()}
-              style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
-              testID="game-close-button">
-              <SymbolView
-                name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                size={16}
-                tintColor="#fff7f1"
-                weight="bold"
-              />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                accessibilityLabel="edit scene"
+                accessibilityRole="button"
+                accessible
+                hitSlop={8}
+                onPress={() =>
+                  router.push({
+                    pathname: '/editor',
+                    params: { mode },
+                  })
+                }
+                style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
+                testID="game-edit-button">
+                <SymbolView
+                  name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                  size={15}
+                  tintColor="#fff7f1"
+                  weight="semibold"
+                />
+              </Pressable>
+
+              <Pressable
+                accessibilityLabel="close game"
+                accessibilityRole="button"
+                accessible
+                hitSlop={8}
+                onPress={() => router.back()}
+                style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
+                testID="game-close-button">
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={16}
+                  tintColor="#fff7f1"
+                  weight="bold"
+                />
+              </Pressable>
+            </View>
           ),
         }}
       />
       <View style={styles.container} testID="game-screen">
         <StatusBar style="light" />
-        <AppHeader sceneTitle={scene.label} onVoiceCaptured={handleVoiceCaptured} />
         <SceneFrame
           interactive
           onFrameMessage={handleFrameMessage}
@@ -179,14 +196,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#050608',
   },
-  closeButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerButton: {
     alignItems: 'center',
     borderRadius: 999,
     height: 42,
     justifyContent: 'center',
     width: 42,
   },
-  closeButtonPressed: {
+  headerButtonPressed: {
     opacity: 0.72,
   },
   debugRail: {

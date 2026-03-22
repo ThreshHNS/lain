@@ -46,20 +46,32 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     (async () => {
-      const session = await createPromptSession('Scene editor draft', 'local-creator');
-      if (!active) {
-        return;
+      try {
+        const session = await createPromptSession('Scene editor draft', 'local-creator');
+        if (!active) {
+          return;
+        }
+
+        setSessionId(session.id);
+
+        const messages = await fetchPromptMessages(session.id);
+        if (!active) {
+          return;
+        }
+
+        setHistory(messages.map(msg => ({
+          id: msg.id,
+          actor: LOCAL_USER,
+          label: msg.text,
+          slot: msg.slot === 'walk' || msg.slot === 'kill' || msg.slot === 'seed' || msg.slot === 'idle'
+            ? msg.slot
+            : undefined,
+          type: 'voice',
+          timestamp: msg.createdAt,
+        })));
+      } catch (error) {
+        void error;
       }
-      setSessionId(session.id);
-      const messages = await fetchPromptMessages(session.id);
-      setHistory(messages.map(msg => ({
-        id: msg.id,
-        actor: LOCAL_USER,
-        label: msg.text,
-        slot: msg.slot ?? null,
-        type: 'voice',
-        timestamp: msg.createdAt,
-      })));
     })();
 
     return () => {
@@ -68,23 +80,49 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addHistory = useCallback((entry: Omit<HistoryEntry, 'id' | 'actor'>) => {
+    const optimisticEntry: HistoryEntry = {
+      id: createId('history'),
+      actor: LOCAL_USER,
+      label: entry.label,
+      slot: entry.slot,
+      timestamp: entry.timestamp,
+      type: entry.type ?? 'voice',
+      audioUri: entry.audioUri,
+    };
+
+    setHistory(prev => [optimisticEntry, ...prev]);
+
     if (!sessionId) {
       return;
     }
 
-    appendPromptMessage(sessionId, entry.label, entry.slot ?? null).then(message => {
-      setHistory(prev => [
-        {
-          id: message.id,
-          actor: LOCAL_USER,
-          label: message.text,
-          slot: message.slot ?? null,
-          type: entry.type ?? 'voice',
-          timestamp: message.createdAt,
-        },
-        ...prev,
-      ]);
-    });
+    appendPromptMessage(sessionId, entry.label, entry.slot ?? null)
+      .then(message => {
+        setHistory(prev =>
+          prev.map(item =>
+            item.id === optimisticEntry.id
+              ? {
+                  id: message.id,
+                  actor: LOCAL_USER,
+                  label: message.text,
+                  slot:
+                    message.slot === 'walk' ||
+                    message.slot === 'kill' ||
+                    message.slot === 'seed' ||
+                    message.slot === 'idle'
+                      ? message.slot
+                      : undefined,
+                  type: entry.type ?? 'voice',
+                  timestamp: message.createdAt,
+                  audioUri: entry.audioUri,
+                }
+              : item,
+          ),
+        );
+      })
+      .catch(error => {
+        void error;
+      });
   }, [sessionId]);
 
   const addAsset = useCallback(
@@ -107,17 +145,17 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
-    slotHint,
-    setSlotHint,
-    history,
-    assets,
-    addHistory,
-    addAsset,
-    collaborators: COLLABORATORS,
-    sessionId,
-  }),
-  [slotHint, history, assets, addHistory, addAsset, sessionId],
-);
+      slotHint,
+      setSlotHint,
+      history,
+      assets,
+      addHistory,
+      addAsset,
+      collaborators: COLLABORATORS,
+      sessionId,
+    }),
+    [slotHint, history, assets, addHistory, addAsset, sessionId],
+  );
 
   return <SceneEditorContext.Provider value={value}>{children}</SceneEditorContext.Provider>;
 }

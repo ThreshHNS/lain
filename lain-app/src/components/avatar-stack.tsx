@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Image, ViewStyle } from 'react-native';
+import { View, StyleSheet, Image, ViewStyle } from 'react-native';
 import type { ActiveUser } from '@/types/editor';
 
 type AvatarStackProps = {
@@ -9,8 +9,12 @@ type AvatarStackProps = {
 export default function AvatarStack({ users, style }: AvatarStackProps) {
   return (
     <View style={[styles.container, style]}>
-      {users.map(user => (
-        <View key={user.id} style={styles.avatarWrapper}>
+      {users.map((user, index) => (
+        <View
+          key={user.id}
+          accessibilityLabel={`${user.name} ${user.isOnline ? 'online' : 'offline'}`}
+          accessible
+          style={[styles.avatarWrapper, index > 0 && styles.avatarOverlap]}>
           <Image
             source={
               user.avatarUrl
@@ -22,9 +26,7 @@ export default function AvatarStack({ users, style }: AvatarStackProps) {
               user.isOnline ? styles.online : styles.offline,
             ]}
           />
-          <Text style={styles.label} numberOfLines={1}>
-            {user.name}
-          </Text>
+          <View style={[styles.presenceDot, user.isOnline ? styles.presenceOnline : styles.presenceOffline]} />
         </View>
       ))}
     </View>
@@ -35,28 +37,43 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingLeft: 8,
   },
   avatarWrapper: {
-    alignItems: 'center',
+    marginLeft: -8,
+    position: 'relative',
+  },
+  avatarOverlap: {
+    marginLeft: -10,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1f1b24',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#15181d',
+    borderWidth: 1,
+    borderColor: '#0b0d10',
   },
   online: {
-    borderWidth: 2,
-    borderColor: '#3dffb8',
+    borderColor: '#d8f7e8',
   },
   offline: {
-    borderWidth: 1,
-    borderColor: '#3a3a3a',
+    borderColor: '#2f343c',
   },
-  label: {
-    color: '#f4e1d7',
-    fontSize: 10,
-    marginTop: 2,
+  presenceDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: '#0b0d10',
+  },
+  presenceOnline: {
+    backgroundColor: '#7ef0b9',
+  },
+  presenceOffline: {
+    backgroundColor: '#565c65',
   },
 });

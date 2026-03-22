@@ -8,17 +8,25 @@ import { useSceneEditor } from '@/context/scene-editor-context';
 
 type AppHeaderProps = {
   sceneTitle: string;
+  activeSceneLabel?: string;
+  sceneCount?: number;
+  onVoiceCaptured?: (uri: string) => void;
 };
 
 const SLOT_HINTS: SlotHint[] = ['walk', 'kill', 'seed', 'idle'];
 
-export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProps) {
+export default function AppHeader({
+  sceneTitle,
+  activeSceneLabel,
+  sceneCount,
+  onVoiceCaptured,
+}: AppHeaderProps) {
   const { slotHint, setSlotHint, history, collaborators, addHistory } = useSceneEditor();
   const { status, audioUri, startRecording, stopRecording, reset } = useVoiceRecorder();
 
   const buttonLabel = useMemo(() => {
     if (status === 'recording') {
-      return 'Recording...';
+      return 'Recording';
     }
     if (status === 'processing') {
       return 'Processing';
@@ -26,20 +34,40 @@ export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProp
     if (status === 'ready') {
       return 'Send voice';
     }
-    return 'Push to talk';
+    return 'Voice prompt';
   }, [status]);
+
+  const metaLabel = useMemo(() => {
+    const sceneCountLabel =
+      sceneCount != null ? `${sceneCount} ${sceneCount === 1 ? 'scene' : 'scenes'}` : null;
+
+    if (sceneCount != null && activeSceneLabel) {
+      return `${sceneCountLabel} · ${activeSceneLabel}`;
+    }
+    if (activeSceneLabel) {
+      return activeSceneLabel;
+    }
+    if (sceneCountLabel) {
+      return `${sceneCountLabel} ready`;
+    }
+    return 'Scene tools';
+  }, [activeSceneLabel, sceneCount]);
 
   const handleVoiceEnd = async () => {
     await stopRecording();
-    if (audioUri) {
+    if (!audioUri) {
+      return;
+    }
+
     addHistory({
       label: 'Voice prompt recorded',
       timestamp: new Date().toISOString(),
       slot: slotHint,
       type: 'voice',
+      audioUri,
     });
-      reset();
-    }
+    onVoiceCaptured?.(audioUri);
+    reset();
   };
 
   const handleRecord = () => {
@@ -52,15 +80,28 @@ export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProp
 
   return (
     <View style={styles.header}>
-      <View>
-        <Text style={styles.sceneLabel}>Scene</Text>
-        <Text style={styles.sceneTitle}>{sceneTitle}</Text>
+      <View style={styles.summaryRow}>
+        <View style={styles.titleBlock}>
+          <Text style={styles.sceneLabel}>Live scene</Text>
+          <Text style={styles.sceneTitle}>{sceneTitle}</Text>
+          <Text style={styles.sceneMeta}>{metaLabel}</Text>
+        </View>
+
+        <View style={styles.utilityRow}>
+          <HistoryDropdown entries={history} />
+          <AvatarStack users={collaborators} />
+        </View>
       </View>
 
-      <View style={styles.centerBlock}>
-        <Pressable style={styles.voiceButton} onPress={handleRecord}>
-          <Text style={styles.voiceText}>{buttonLabel}</Text>
+      <View style={styles.controlRow}>
+        <Pressable onPress={handleRecord}>
+          {({ pressed }) => (
+            <View style={[styles.voiceButton, pressed && styles.voiceButtonPressed]}>
+              <Text style={styles.voiceText}>{buttonLabel}</Text>
+            </View>
+          )}
         </Pressable>
+
         <View style={styles.slotRow}>
           {SLOT_HINTS.map(hint => (
             <Pressable
@@ -81,11 +122,6 @@ export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProp
           ))}
         </View>
       </View>
-
-      <View style={styles.rightBlock}>
-        <HistoryDropdown entries={history} />
-        <AvatarStack users={collaborators} />
-      </View>
     </View>
   );
 }
@@ -93,64 +129,99 @@ export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProp
 const styles = StyleSheet.create({
   header: {
     width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#120c10',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#0b0d10',
+    gap: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+  },
+  summaryRow: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 12,
+    justifyContent: 'space-between',
+  },
+  titleBlock: {
+    flex: 1,
+    gap: 4,
+    minWidth: 180,
   },
   sceneLabel: {
-    color: '#b1b1b1',
+    color: '#7f878f',
     fontSize: 11,
-    letterSpacing: 1,
+    fontWeight: '600',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
   },
   sceneTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '600',
+    color: '#f5f1eb',
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  centerBlock: {
-    flex: 1,
+  sceneMeta: {
+    color: '#9ba2aa',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  utilityRow: {
     alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  controlRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   voiceButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    alignItems: 'center',
     borderRadius: 999,
-    backgroundColor: '#ff7fe5',
+    backgroundColor: '#d8f7e8',
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  voiceButtonPressed: {
+    opacity: 0.82,
   },
   voiceText: {
-    color: '#130409',
+    color: '#07110c',
+    fontSize: 13,
     fontWeight: '700',
+    letterSpacing: 0.2,
   },
   slotRow: {
-    marginTop: 8,
     flexDirection: 'row',
-    gap: 6,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   slotChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#12161a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   slotChipActive: {
-    backgroundColor: 'rgba(61,255,184,0.18)',
+    borderColor: 'rgba(170, 248, 214, 0.34)',
+    backgroundColor: 'rgba(61,255,184,0.12)',
   },
   slotLabel: {
-    color: '#fff',
+    color: '#c2cad2',
     fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   slotLabelActive: {
-    color: '#3dffb8',
-  },
-  rightBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    color: '#d8f7e8',
   },
 });

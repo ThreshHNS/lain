@@ -25,7 +25,7 @@ export default function HistoryDropdown({ entries }: HistoryDropdownProps) {
   return (
     <>
       <Pressable style={styles.button} onPress={() => setVisible(true)}>
-        <Text style={styles.buttonText}>History</Text>
+        <Text style={styles.buttonText}>History {entries.length ? `· ${entries.length}` : ''}</Text>
       </Pressable>
 
       <Modal visible={visible} transparent animationType="fade">
@@ -39,6 +39,8 @@ export default function HistoryDropdown({ entries }: HistoryDropdownProps) {
                 <View style={styles.entry}>
                   <Text style={styles.label}>
                     [{item.type.toUpperCase()}] {item.actor.name}
+                    {item.slot ? ` · ${item.slot}` : ''}
+                    {item.audioUri ? ' · voice clip' : ''}
                   </Text>
                   <Text style={styles.detail}>{item.label}</Text>
                   <Text style={styles.timestamp}>
@@ -61,13 +63,16 @@ export default function HistoryDropdown({ entries }: HistoryDropdownProps) {
 
 const styles = StyleSheet.create({
   button: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#12161a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   buttonText: {
-    color: '#fff7f1',
+    color: '#cbd3da',
+    fontSize: 12,
     fontWeight: '600',
   },
   backdrop: {

@@ -18,23 +18,24 @@ import {
   DEFAULT_SCENE_BASE_URL,
   MODE_OPTIONS,
   Mode,
+  SceneOption,
 } from '@/lib/scene-config';
-import AppHeader from '@/components/app-header';
-import AssetPicker from '@/components/asset-picker';
-import ExportBundleButton from '@/components/export-bundle-button';
-import HistoryPanel from '@/components/history-panel';
-import { SceneEditorProvider, useSceneEditor } from '@/context/scene-editor-context';
 
 const E2E_DEBUG_ENABLED = process.env.EXPO_PUBLIC_E2E_DEBUG === '1';
+type ScenePreview = SceneOption & { previewUri: string };
 
 function HomeScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
-  const listRef = useRef<FlatList<(typeof MODE_OPTIONS)[number]>>(null);
+  const { height, width } = useWindowDimensions();
+  const listRef = useRef<FlatList<ScenePreview>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [version, setVersion] = useState(() => Date.now());
-  const { history } = useSceneEditor();
+  const stageHeight = Math.min(
+    Math.max(height - insets.top - insets.bottom - 24, 520),
+    width >= 960 ? 920 : 840,
+  );
+  const contentWidth = Math.min(width - 24, 980);
 
   const handleRetry = useCallback(() => {
     setVersion(Date.now());
@@ -64,78 +65,80 @@ function HomeScreenContent() {
 
   const handleMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const nextIndex = Math.round(event.nativeEvent.contentOffset.y / Math.max(height, 1));
+      const nextIndex = Math.round(event.nativeEvent.contentOffset.y / Math.max(stageHeight, 1));
       setActiveIndex(Math.max(0, Math.min(nextIndex, scenes.length - 1)));
     },
-    [height, scenes.length],
+    [scenes.length, stageHeight],
   );
 
   return (
     <View style={styles.container} testID="scene-feed-screen">
       <StatusBar style="light" />
-      <AppHeader sceneTitle="Scene selector" />
-      <HistoryPanel entries={history} />
-      <AssetPicker />
-      <ExportBundleButton />
-
-      <FlatList
-        contentInsetAdjustmentBehavior="never"
-        data={scenes}
-        decelerationRate="fast"
-        keyExtractor={item => item.id}
-        onMomentumScrollEnd={handleMomentumEnd}
-        pagingEnabled
-        renderItem={({ item, index }) => (
-          <SceneFeedCard
-            active={index === activeIndex}
-            height={height}
-            onPlay={handlePlay}
-            onRetry={index === activeIndex ? handleRetry : undefined}
-            retryTestID={
-              E2E_DEBUG_ENABLED && index === activeIndex
-                ? `scene-preview-${item.id}-retry-button`
-                : undefined
-            }
-            scene={item}
-            statusTestID={
-              E2E_DEBUG_ENABLED && index === activeIndex
-                ? `scene-preview-${item.id}-status`
-                : undefined
-            }
-            uri={item.previewUri}
-          />
-        )}
-        ref={listRef}
-        showsVerticalScrollIndicator={false}
-        snapToAlignment="start"
-        testID="scene-feed-list"
-        windowSize={3}
-      />
-
       <View
-        pointerEvents="none"
-        style={[styles.pager, { paddingTop: insets.top + 16 }]}
-        testID="scene-feed-pager">
-        <GlassSurface style={styles.pagerSurface}>
-          {scenes.map((scene, index) => (
-            <View
-              key={scene.id}
-              style={[styles.pagerDot, index === activeIndex && styles.pagerDotActive]}
-              testID={`scene-feed-dot-${scene.id}`}
+        style={[
+          styles.screen,
+          {
+            paddingBottom: insets.bottom + 12,
+            paddingTop: insets.top + 12,
+          },
+        ]}>
+        <View style={styles.stageSection}>
+          <View style={[styles.stageShell, { height: stageHeight, maxWidth: contentWidth }]}>
+            <FlatList
+              bounces={false}
+              contentInsetAdjustmentBehavior="never"
+              data={scenes}
+              decelerationRate="fast"
+              keyExtractor={item => item.id}
+              onMomentumScrollEnd={handleMomentumEnd}
+              pagingEnabled
+              renderItem={({ item, index }) => (
+                <SceneFeedCard
+                  active={index === activeIndex}
+                  height={stageHeight}
+                  onPlay={handlePlay}
+                  onRetry={index === activeIndex ? handleRetry : undefined}
+                  retryTestID={
+                    E2E_DEBUG_ENABLED && index === activeIndex
+                      ? `scene-preview-${item.id}-retry-button`
+                      : undefined
+                  }
+                  scene={item}
+                  statusTestID={
+                    E2E_DEBUG_ENABLED && index === activeIndex
+                      ? `scene-preview-${item.id}-status`
+                      : undefined
+                  }
+                  uri={item.previewUri}
+                />
+              )}
+              ref={listRef}
+              showsVerticalScrollIndicator={false}
+              snapToAlignment="start"
+              testID="scene-feed-list"
+              windowSize={3}
             />
-          ))}
-        </GlassSurface>
+
+            <View pointerEvents="none" style={styles.pager} testID="scene-feed-pager">
+              <GlassSurface style={styles.pagerSurface}>
+                {scenes.map((scene, index) => (
+                  <View
+                    key={scene.id}
+                    style={[styles.pagerDot, index === activeIndex && styles.pagerDotActive]}
+                    testID={`scene-feed-dot-${scene.id}`}
+                  />
+                ))}
+              </GlassSurface>
+            </View>
+          </View>
+        </View>
       </View>
     </View>
   );
 }
 
 export default function HomeScreen() {
-  return (
-    <SceneEditorProvider>
-      <HomeScreenContent />
-    </SceneEditorProvider>
-  );
+  return <HomeScreenContent />;
 }
 
 const styles = StyleSheet.create({
@@ -143,9 +146,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#050608',
   },
+  screen: {
+    flex: 1,
+    gap: 16,
+  },
+  stageSection: {
+    alignItems: 'center',
+  },
+  stageShell: {
+    overflow: 'hidden',
+    width: '100%',
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#090b0e',
+  },
   pager: {
+    bottom: 16,
     position: 'absolute',
     right: 16,
+    top: 16,
+    justifyContent: 'center',
   },
   pagerSurface: {
     borderRadius: 999,
@@ -155,9 +176,9 @@ const styles = StyleSheet.create({
   },
   pagerDot: {
     width: 6,
-    height: 20,
+    height: 18,
     borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   pagerDotActive: {
     backgroundColor: '#fff6ef',

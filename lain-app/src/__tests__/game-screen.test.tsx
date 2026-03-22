@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react-native';
 import GameScreen from '@/app/game';
 
 const mockBack = jest.fn();
+const mockPush = jest.fn();
 
 jest.mock('expo-router', () => ({
   Stack: {
@@ -13,6 +14,7 @@ jest.mock('expo-router', () => ({
   }),
   useRouter: () => ({
     back: mockBack,
+    push: mockPush,
   }),
 }));
 
@@ -37,6 +39,7 @@ jest.mock('@/components/scene-frame', () => {
 describe('GameScreen', () => {
   beforeEach(() => {
     mockBack.mockClear();
+    mockPush.mockClear();
   });
 
   it('renders the selected scene in embedded game mode', () => {

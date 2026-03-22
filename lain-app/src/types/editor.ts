@@ -14,6 +14,7 @@ export type HistoryEntry = {
   label: string;
   slot?: SlotHint;
   type: 'voice' | 'text' | 'photo' | 'asset';
+  audioUri?: string;
 };
 
 export type AssetSourceType = 'google_drive' | 'poly_pizza' | 'sketchfab' | 'upload';

@@ -1,7 +1,10 @@
-import { useMemo } from 'react';
-import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { AssetReference } from '@/types/editor';
+import { useMemo, useState } from 'react';
+import { FlatList, Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import type { AssetReference, SlotHint } from '@/types/editor';
 import { useSceneEditor } from '@/context/scene-editor-context';
+import AssetDetailDrawer from './asset-detail-drawer';
+
+const SLOT_HINTS: SlotHint[] = ['walk', 'kill', 'seed', 'idle'];
 
 const SAMPLE_ASSETS: AssetReference[] = [
   {
@@ -36,37 +39,80 @@ const SAMPLE_ASSETS: AssetReference[] = [
 
 export default function AssetPicker() {
   const { assets, addAsset } = useSceneEditor();
+  const [assetSlot, setAssetSlot] = useState<SlotHint>('walk');
+  const [detailAsset, setDetailAsset] = useState<AssetReference | null>(null);
+  const { width } = useWindowDimensions();
 
   const selectedIds = useMemo(() => new Set(assets.map(asset => asset.id)), [assets]);
+  const cardWidth = Math.min(Math.max(width * 0.48, 188), 236);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Remote asset browser</Text>
+      <View style={styles.header}>
+        <View style={styles.titleBlock}>
+          <Text style={styles.heading}>Asset browser</Text>
+          <Text style={styles.subheading}>Attach scene references without covering the preview.</Text>
+        </View>
+        <Text style={styles.counter}>{assets.length} selected</Text>
+      </View>
+
+      <View style={styles.slotRow}>
+        {SLOT_HINTS.map(hint => (
+          <Pressable
+            key={hint}
+            style={[
+              styles.slotChip,
+              assetSlot === hint && styles.slotChipActive,
+            ]}
+            onPress={() => setAssetSlot(hint)}>
+            <Text style={[styles.slotLabel, assetSlot === hint && styles.slotLabelActive]}>
+              {hint}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <FlatList
+        contentContainerStyle={styles.listContent}
         data={SAMPLE_ASSETS}
         horizontal
         showsHorizontalScrollIndicator={false}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.meta}>{item.source}</Text>
-            <Text style={styles.meta}>{item.license}</Text>
+          <View style={[styles.card, { width: cardWidth }]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardCopy}>
+                <Text numberOfLines={2} style={styles.name}>
+                  {item.name}
+                </Text>
+                <Text style={styles.meta}>
+                  {item.source} · {item.license}
+                </Text>
+              </View>
+              <Text style={styles.slotTag}>{assetSlot}</Text>
+            </View>
             <Pressable style={styles.linkButton} onPress={() => Linking.openURL(item.url)}>
-              <Text style={styles.linkText}>View</Text>
+              <Text style={styles.linkText}>Open asset</Text>
             </Pressable>
             <Pressable
               style={[
                 styles.selectButton,
                 selectedIds.has(item.id) && styles.selectButtonActive,
               ]}
-              onPress={() => addAsset(item)}>
-              <Text style={styles.selectText}>
-                {selectedIds.has(item.id) ? 'Selected' : 'Select asset'}
+              onPress={() => addAsset({ ...item, slot: assetSlot })}>
+              <Text style={[styles.selectText, selectedIds.has(item.id) && styles.selectTextActive]}>
+                {selectedIds.has(item.id) ? 'Selected' : 'Attach asset'}
               </Text>
+            </Pressable>
+            <Pressable style={styles.detailButton} onPress={() => setDetailAsset(item)}>
+              <Text style={styles.detailText}>Details</Text>
             </Pressable>
           </View>
         )}
+      />
+      <AssetDetailDrawer
+        asset={detailAsset}
+        visible={Boolean(detailAsset)}
+        onClose={() => setDetailAsset(null)}
       />
     </View>
   );
@@ -74,54 +120,143 @@ export default function AssetPicker() {
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#0b0d10',
+    gap: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  header: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  titleBlock: {
+    flex: 1,
+    gap: 4,
   },
   heading: {
-    color: '#fff',
+    color: '#f2eee8',
     fontSize: 14,
     fontWeight: '700',
-    marginBottom: 8,
-    marginLeft: 16,
+  },
+  subheading: {
+    color: '#8b929a',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  counter: {
+    color: '#d8f7e8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  slotRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  slotChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#12161a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  slotChipActive: {
+    borderColor: 'rgba(170, 248, 214, 0.34)',
+    backgroundColor: 'rgba(61,255,184,0.12)',
+  },
+  slotLabel: {
+    color: '#c2cad2',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  slotLabelActive: {
+    color: '#d8f7e8',
+  },
+  listContent: {
+    gap: 12,
+    paddingRight: 2,
   },
   card: {
-    width: 220,
-    borderRadius: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: '#111419',
+    gap: 10,
     padding: 14,
-    backgroundColor: '#0f0c13',
-    marginLeft: 16,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  cardCopy: {
+    flex: 1,
     gap: 4,
   },
   name: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#f6f1eb',
     fontSize: 16,
+    fontWeight: '600',
   },
   meta: {
-    color: '#bdbdbd',
+    color: '#8a929a',
     fontSize: 12,
   },
-  linkButton: {
-    marginTop: 8,
+  slotTag: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    overflow: 'hidden',
+    color: '#d8f7e8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    textTransform: 'uppercase',
+    backgroundColor: 'rgba(61,255,184,0.1)',
+  },
+  linkButton: {
+    borderRadius: 12,
+    backgroundColor: '#181d23',
+    paddingVertical: 10,
   },
   linkText: {
-    color: '#3dffb8',
+    color: '#e7ebe8',
     textAlign: 'center',
     fontWeight: '600',
   },
   selectButton: {
-    marginTop: 8,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    backgroundColor: '#d8f7e8',
+    paddingVertical: 11,
   },
   selectButtonActive: {
-    backgroundColor: '#3dffb8',
+    borderRadius: 12,
+    backgroundColor: 'rgba(61,255,184,0.18)',
   },
   selectText: {
-    color: '#fff',
+    color: '#07110c',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  selectTextActive: {
+    color: '#d8f7e8',
+  },
+  detailButton: {
+    borderRadius: 12,
+    backgroundColor: '#181d23',
+    paddingVertical: 10,
+  },
+  detailText: {
+    color: '#cfd6de',
     textAlign: 'center',
     fontWeight: '600',
   },

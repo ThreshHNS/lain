@@ -3,7 +3,7 @@ import { useSceneEditor } from '@/context/scene-editor-context';
 import { exportDraft } from '@/lib/api/scene-draft';
 
 export default function ExportBundleButton() {
-  const { slotHint, assets, history, sessionId } = useSceneEditor();
+  const { assets, sessionId } = useSceneEditor();
 
   const handleExport = async () => {
     if (!sessionId) {
@@ -21,22 +21,30 @@ export default function ExportBundleButton() {
 
   return (
     <Pressable style={styles.button} onPress={handleExport}>
-      <Text style={styles.label}>Export manifest for Codex</Text>
+      <Text style={styles.label}>Export manifest</Text>
+      <Text style={styles.caption}>Codex bundle · {assets.length} assets</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: '#3dffb8',
     alignItems: 'center',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(170, 248, 214, 0.18)',
+    backgroundColor: '#11161b',
+    gap: 4,
+    paddingVertical: 14,
   },
   label: {
-    color: '#050608',
+    color: '#e9efe9',
+    fontSize: 15,
     fontWeight: '700',
+  },
+  caption: {
+    color: '#8a929a',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

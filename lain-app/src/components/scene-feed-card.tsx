@@ -1,5 +1,5 @@
+import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Mode, SceneOption } from '@/lib/scene-config';
 
@@ -27,8 +27,6 @@ export default function SceneFeedCard({
   retryTestID,
   uri,
 }: SceneFeedCardProps) {
-  const insets = useSafeAreaInsets();
-
   return (
     <View style={[styles.page, { height }]} testID={`scene-card-${scene.id}`}>
       <SceneFrame
@@ -44,28 +42,32 @@ export default function SceneFeedCard({
 
       <View
         pointerEvents="box-none"
-        style={[
-          styles.overlay,
-          {
-            paddingBottom: insets.bottom + 24,
-            paddingTop: insets.top + 22,
-          },
-        ]}>
+        style={styles.overlay}>
         <GlassSurface style={[styles.sceneChip, active && styles.sceneChipActive]}>
           <Text style={styles.sceneChipText}>{scene.label}</Text>
         </GlassSurface>
 
         <View style={styles.bottomRail}>
           <GlassSurface style={styles.metaCard}>
-            <Text style={styles.sceneTitle}>{scene.label}</Text>
             <Text style={styles.sceneSubtitle}>{scene.subtitle}</Text>
+            <Text style={styles.sceneTitle}>{scene.label}</Text>
             <Text style={styles.sceneHint}>Swipe to switch scenes. {scene.touchHint}.</Text>
           </GlassSurface>
 
-          <Pressable onPress={() => onPlay(scene.id)} testID={`scene-play-${scene.id}`}>
+          <Pressable
+            accessibilityLabel={`scene-play-${scene.id}`}
+            accessibilityRole="button"
+            accessible
+            onPress={() => onPlay(scene.id)}
+            testID={`scene-play-${scene.id}`}>
             {({ pressed }) => (
               <GlassSurface interactive style={[styles.playButton, pressed && styles.playButtonPressed]}>
-                <Text style={styles.playLabel}>Play</Text>
+                <SymbolView
+                  name={{ ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' }}
+                  size={20}
+                  tintColor="#fff8f4"
+                  weight="bold"
+                />
               </GlassSurface>
             )}
           </Pressable>
@@ -83,71 +85,69 @@ const styles = StyleSheet.create({
   },
   scrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(3, 4, 6, 0.14)',
+    backgroundColor: 'rgba(3, 4, 6, 0.08)',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-between',
     paddingHorizontal: 18,
+    paddingVertical: 18,
   },
   sceneChip: {
     alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   sceneChipActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
   },
   sceneChipText: {
     color: '#fff6ef',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.4,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
   bottomRail: {
-    gap: 14,
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 12,
   },
   metaCard: {
-    borderRadius: 28,
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
+    borderRadius: 24,
+    flex: 1,
+    gap: 6,
+    maxWidth: 540,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   sceneTitle: {
     color: '#fff7f1',
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: -0.8,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
   },
   sceneSubtitle: {
     color: '#ffd5c0',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    letterSpacing: 1.4,
   },
   sceneHint: {
     color: '#f4e1d7',
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 18,
   },
   playButton: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
     borderRadius: 999,
-    minWidth: 136,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
   },
   playButtonPressed: {
     opacity: 0.85,
-  },
-  playLabel: {
-    color: '#fff8f4',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.4,
   },
 });
