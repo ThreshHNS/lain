@@ -1,0 +1,18 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - p0
+---
+- launchApp
+- assertVisible:
+    id: scene-feed-screen
+- assertVisible:
+    id: scene-card-awp
+- assertVisible:
+    id: scene-play-awp
+- scrollUntilVisible:
+    direction: DOWN
+    element:
+      id: scene-card-slasher
+- assertVisible:
+    id: scene-play-slasher

@@ -121,7 +121,7 @@ Read first:
 - AGENTS.md
 - lain-app/AGENTS.md
 
-Your ownership zone is the nested app repo:
+Your ownership zone is the app zone in the root monorepo:
 - lain-app/src/
 - lain-app/app.json
 - lain-app/package.json

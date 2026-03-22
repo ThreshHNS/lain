@@ -1,0 +1,14 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - p0
+---
+- launchApp
+- tapOn:
+    id: scene-play-awp
+- tapOn:
+    point: 50%,70%
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-audio-playing
+    timeout: 10000

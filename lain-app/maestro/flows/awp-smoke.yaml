@@ -1,0 +1,34 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - p0
+---
+- launchApp
+- tapOn:
+    id: scene-play-awp
+- assertVisible:
+    id: game-screen
+- assertVisible:
+    id: game-close-button
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-mode-awp
+    timeout: 15000
+- tapOn:
+    point: 50%,70%
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-audio-playing
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-action-shot-hit
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-target-dead
+    timeout: 10000
+- tapOn:
+    id: game-close-button
+- assertVisible:
+    id: scene-feed-screen

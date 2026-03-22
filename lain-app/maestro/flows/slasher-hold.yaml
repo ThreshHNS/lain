@@ -1,0 +1,26 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - p0
+---
+- launchApp
+- scrollUntilVisible:
+    direction: DOWN
+    element:
+      id: scene-play-slasher
+- tapOn:
+    id: scene-play-slasher
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-mode-slasher
+    timeout: 15000
+- longPressOn:
+    point: 50%,70%
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-action-slash-hit
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: scene-debug-target-dead
+    timeout: 10000

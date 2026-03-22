@@ -1,0 +1,10 @@
+appId: com.avelts.lain
+tags:
+  - ai
+  - optional
+---
+- launchApp
+- assertVisible:
+    id: scene-feed-screen
+- assertNoDefectsWithAI:
+    optional: true

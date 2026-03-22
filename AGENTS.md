@@ -2,12 +2,12 @@
 
 ## Scope
 
-This root file governs the hosted Babylon scene workspace and all shared integration files in the root repository.
+This root file governs the whole `lain` monorepo: hosted Babylon scenes, Expo app shell, shared integration files, and docs.
 
 Important repo detail:
 
 - `lain-scene/` is tracked by the root repo
-- `lain-app/` currently has its own `.git` directory and behaves like a nested repo
+- `lain-app/` is tracked by the root repo
 - when working inside `lain-app/`, also follow `lain-app/AGENTS.md`
 
 ## Scene Flow Model
@@ -69,7 +69,7 @@ Can touch scene folders only for agreed routing or contract wiring.
 
 ### `app-agent`
 
-Owns the nested app repo:
+Owns the app zone inside the root repo:
 
 - `lain-app/src/`
 - `lain-app/app.json`
@@ -159,7 +159,7 @@ Examples:
 ```bash
 git checkout -b codex/scene-awp-hit-feedback
 git checkout -b codex/scene-slasher-hold-tuning
-git -C lain-app checkout -b codex/app-scene-registry
+git checkout -b codex/app-scene-registry
 ```
 
 ## Worktree Setup
@@ -174,10 +174,10 @@ git worktree add -b codex/scene-slasher-hold-tuning ../lain-slasher HEAD
 git worktree add -b codex/integration-router ../lain-integration HEAD
 ```
 
-For the app repo:
+For the app zone:
 
 ```bash
-git -C lain-app worktree add -b codex/app-scene-registry ../lain-app-shell HEAD
+git worktree add -b codex/app-scene-registry ../lain-app-shell HEAD
 ```
 
 ## Commit Scope Rules
@@ -197,8 +197,8 @@ git commit -m "scene-slasher: tune hold movement window"
 ```
 
 ```bash
-git -C lain-app add src app.json eas.json
-git -C lain-app commit -m "app: extend scene selector"
+git add lain-app/src lain-app/app.json lain-app/eas.json
+git commit -m "app: extend scene selector"
 ```
 
 Bad:
