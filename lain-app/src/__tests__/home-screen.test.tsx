@@ -49,6 +49,37 @@ describe('HomeScreen', () => {
     expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('embedded=1');
     expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('preview=1');
     expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('still=1');
+
+    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('/slasher/');
+    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('embedded=1');
+    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('preview=1');
+    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('still=1');
+
+    expect(screen.getByTestId('scene-preview-tomato-guard-uri').props.children).toContain(
+      '/tomato-guard/',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-guard-uri').props.children).toContain(
+      'embedded=1',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-guard-uri').props.children).toContain(
+      'preview=1',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-guard-uri').props.children).toContain(
+      'still=1',
+    );
+
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).toContain(
+      '/tomato-grid/',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).toContain(
+      'embedded=1',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).toContain(
+      'preview=1',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).toContain(
+      'still=1',
+    );
   });
 
   it('opens gameplay mode from the overlay play button', () => {

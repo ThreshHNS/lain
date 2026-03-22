@@ -44,6 +44,26 @@ test('SL-01: slasher hold causes movement and a hit', async ({ page }) => {
   await expect.poll(() => getState(page).then(state => state.targetState)).toBe('dead');
 });
 
+test('TG-01: tomato guard boots and can defeat a spawned threat', async ({ page }) => {
+  await gotoScene(page, 'mode=tomato-guard&still=1');
+
+  const didHit = await page.evaluate(() => window.__lainTestApi.defeatThreat());
+  expect(didHit).toBe(true);
+
+  await expect.poll(() => getState(page).then(state => state.kills)).toBe(1);
+  await expect.poll(() => getState(page).then(state => state.targetState)).toBe('missing');
+});
+
+test('TG-02: tomato grid rewards the correct cell hit', async ({ page }) => {
+  await gotoScene(page, 'mode=tomato-grid&still=1');
+
+  const didHit = await page.evaluate(() => window.__lainTestApi.attackThreat());
+  expect(didHit).toBe(true);
+
+  await expect.poll(() => getState(page).then(state => state.kills)).toBe(1);
+  await expect.poll(() => getState(page).then(state => state.savedHarvestValue)).toBe(120);
+});
+
 test('AUDIO-01 + AUDIO-02 + AUDIO-03: each mode has its own looping music after user action', async ({ page }) => {
   await gotoScene(page, 'mode=awp&still=1');
   const awpSource = await page.evaluate(() => document.getElementById('bgm').src);

@@ -20,6 +20,8 @@ describe('scene-config', () => {
   it('falls back to awp for unknown modes', () => {
     expect(resolveMode('awp')).toBe('awp');
     expect(resolveMode('slasher')).toBe('slasher');
+    expect(resolveMode('tomato-guard')).toBe('tomato-guard');
+    expect(resolveMode('tomato-grid')).toBe('tomato-grid');
     expect(resolveMode('broken')).toBe('awp');
     expect(resolveMode(null)).toBe('awp');
   });

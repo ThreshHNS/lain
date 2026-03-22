@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>lain tomato grid</title>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const knownModes = new Set(['awp', 'slasher', 'tomato-guard', 'tomato-grid']);
+        const requestedMode = params.get('mode');
+
+        if (requestedMode && requestedMode !== 'tomato-grid' && knownModes.has(requestedMode)) {
+          const nextUrl = new URL(`../${requestedMode}/`, window.location.href);
+          const nextSearch = new URLSearchParams(params);
+          nextSearch.delete('mode');
+          nextUrl.search = nextSearch.toString();
+          nextUrl.hash = window.location.hash;
+          window.location.replace(nextUrl.toString());
+          return;
+        }
+
+        if (params.has('mode')) {
+          const cleanedUrl = new URL(window.location.href);
+          params.delete('mode');
+          cleanedUrl.search = params.toString();
+          history.replaceState(null, '', cleanedUrl.toString());
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="../mode-switcher.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Arial Narrow", Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #10151d;
+      }
+
+      body {
+        position: relative;
+        touch-action: manipulation;
+      }
+
+      #renderCanvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        image-rendering: pixelated;
+        touch-action: none;
+      }
+
+      #scanlines,
+      #vignette,
+      #damage,
+      #reggae {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      #scanlines {
+        z-index: 10;
+        background: repeating-linear-gradient(
+          0deg,
+          rgba(0, 0, 0, 0.08) 0px,
+          rgba(0, 0, 0, 0.08) 1px,
+          transparent 1px,
+          transparent 3px
+        );
+      }
+
+      #vignette {
+        z-index: 11;
+        background: radial-gradient(circle at center, transparent 42%, rgba(0, 0, 0, 0.58) 100%);
+      }
+
+      #damage {
+        z-index: 12;
+        background: rgba(180, 0, 0, 0);
+      }
+
+      #reggae {
+        z-index: 13;
+        background: transparent;
+        mix-blend-mode: screen;
+        opacity: 0;
+      }
+
+      #mode-chip,
+      #hud,
+      #legend,
+      #stolenBanner {
+        position: fixed;
+        z-index: 20;
+        pointer-events: none;
+        text-transform: uppercase;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+      }
+
+      #mode-chip {
+        top: 18px;
+        left: 18px;
+        color: #dbe4ed;
+        font-size: 11px;
+        letter-spacing: 0.24em;
+      }
+
+      #hud {
+        left: 18px;
+        bottom: 18px;
+        color: #ffd4a3;
+        font-size: 10px;
+        letter-spacing: 2px;
+        line-height: 1.7;
+      }
+
+      #legend {
+        right: 18px;
+        bottom: 18px;
+        color: #a9b5c6;
+        font-size: 9px;
+        letter-spacing: 2px;
+        line-height: 1.7;
+        text-align: right;
+      }
+
+      #stolenBanner {
+        left: 50%;
+        top: 50%;
+        z-index: 24;
+        color: #f7f3e8;
+        font-size: clamp(24px, 4vw, 34px);
+        letter-spacing: 6px;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.92);
+      }
+
+      #stolenBanner.active {
+        opacity: 1;
+        animation: stolenPulse 0.9s ease-in-out infinite alternate;
+      }
+
+      @keyframes stolenPulse {
+        from {
+          transform: translate(-50%, -50%) scale(0.96);
+          filter: brightness(0.95);
+        }
+
+        to {
+          transform: translate(-50%, -50%) scale(1.02);
+          filter: brightness(1.15);
+        }
+      }
+
+      #touch-controls {
+        position: fixed;
+        inset: auto 20px calc(22px + env(safe-area-inset-bottom)) 20px;
+        z-index: 40;
+        display: none;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        pointer-events: none;
+      }
+
+      body[data-touch='true'] #touch-controls {
+        display: flex;
+      }
+
+      #dpad {
+        display: grid;
+        grid-template-columns: repeat(3, 62px);
+        grid-template-rows: repeat(3, 62px);
+        gap: 8px;
+        pointer-events: auto;
+      }
+
+      .touch-button {
+        border: 1px solid rgba(255, 212, 163, 0.45);
+        border-radius: 18px;
+        background: rgba(18, 20, 24, 0.74);
+        color: #fff3e1;
+        font-size: 20px;
+        font-weight: 700;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .touch-button[data-active='true'] {
+        transform: scale(0.97);
+        background: rgba(70, 46, 24, 0.88);
+      }
+
+      .dpad-up {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .dpad-left {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .dpad-down {
+        grid-column: 2;
+        grid-row: 3;
+      }
+
+      .dpad-right {
+        grid-column: 3;
+        grid-row: 2;
+      }
+
+      #attack-button {
+        width: 112px;
+        height: 112px;
+        border-radius: 999px;
+        font-size: 17px;
+        letter-spacing: 1.2px;
+        pointer-events: auto;
+      }
+
+      body[data-embedded='true'] .mode-switcher,
+      body[data-embedded='true'] .route-transition {
+        display: none;
+      }
+
+      body[data-preview='true'] #hud,
+      body[data-preview='true'] #legend,
+      body[data-preview='true'] #touch-controls {
+        display: none;
+      }
+    </style>
+  </head>
+  <body data-scene-mode="tomato-grid" data-scene-root="../">
+    <nav class="mode-switcher" aria-label="Scene mode switcher">
+      <a class="mode-link" data-target-mode="awp" href="../awp/">
+        <span class="mode-link__title">AWP</span>
+        <span class="mode-link__subtitle">long range</span>
+      </a>
+      <a class="mode-link" data-target-mode="slasher" href="../slasher/">
+        <span class="mode-link__title">Slasher</span>
+        <span class="mode-link__subtitle">close range</span>
+      </a>
+      <a class="mode-link" data-target-mode="tomato-guard" href="../tomato-guard/">
+        <span class="mode-link__title">Tomato Guard</span>
+        <span class="mode-link__subtitle">field defense</span>
+      </a>
+      <a class="mode-link" data-target-mode="tomato-grid" href="../tomato-grid/">
+        <span class="mode-link__title">Tomato Grid</span>
+        <span class="mode-link__subtitle">tile timing</span>
+      </a>
+    </nav>
+    <div class="route-transition" aria-hidden="true"></div>
+
+    <canvas id="renderCanvas"></canvas>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    <div id="damage"></div>
+    <div id="reggae"></div>
+    <div id="mode-chip">mode: tomato grid</div>
+    <div id="hud">STOPPED 0 // STOLEN 0 // HP 5 // TARGET A1<br />ПОБИТО ВРАГОВ 0 // СПАСЕНО УРОЖАЯ ₽0</div>
+    <div id="legend">WASD OR ARROWS PICK CELL<br />SPACE OR ENTER ATTACK</div>
+    <div id="stolenBanner">Ваши помидоры украли</div>
+    <div id="touch-controls" aria-hidden="true">
+      <div id="dpad">
+        <button class="touch-button dpad-up" data-key="KeyW" type="button">▲</button>
+        <button class="touch-button dpad-left" data-key="KeyA" type="button">◀</button>
+        <button class="touch-button dpad-down" data-key="KeyS" type="button">▼</button>
+        <button class="touch-button dpad-right" data-key="KeyD" type="button">▶</button>
+      </div>
+      <button class="touch-button" id="attack-button" type="button">HIT</button>
+    </div>
+    <audio id="bgm" loop playsinline></audio>
+
+    <script src="../mode-switcher.js"></script>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="../engine/sprite.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>

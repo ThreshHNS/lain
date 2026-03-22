@@ -8,7 +8,6 @@ export type Mode =
   | 'psx-babylon-scene'
   | 'tomato-grid'
   | 'tomato-guard';
-
 export type SceneVariant = 'game' | 'preview';
 
 export type SceneOption = {
@@ -29,8 +28,18 @@ export const MODE_OPTIONS: SceneOption[] = [
   { id: 'meow-3', label: 'Meow Arena', subtitle: 'surreal orbit', touchHint: 'drag rotate, tap cycle' },
   { id: 'meowww', label: 'Dark Labyrinth', subtitle: 'endless waves', touchHint: 'wasd + space' },
   { id: 'psx-babylon-scene', label: 'PSX Showcase', subtitle: 'reference demo', touchHint: 'wasd to move' },
-  { id: 'tomato-grid', label: 'Tomato Grid', subtitle: 'tower defense', touchHint: 'wasd + space' },
-  { id: 'tomato-guard', label: 'Tomato Guard', subtitle: 'farm defense', touchHint: 'drag move, tap attack' },
+  {
+    id: 'tomato-guard',
+    label: 'Tomato Guard',
+    subtitle: 'field defense',
+    touchHint: 'drag move, tap hit',
+  },
+  {
+    id: 'tomato-grid',
+    label: 'Tomato Grid',
+    subtitle: 'tile timing',
+    touchHint: 'tap d-pad + hit',
+  },
 ];
 
 const VALID_MODES = new Set<Mode>(MODE_OPTIONS.map(o => o.id));
