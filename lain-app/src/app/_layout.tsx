@@ -18,6 +18,14 @@ export default function RootLayout() {
             presentation: 'fullScreenModal',
           }}
         />
+        <Stack.Screen
+          name="editor"
+          options={{
+            animation: 'fade',
+            headerShown: true,
+            presentation: 'fullScreenModal',
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );
