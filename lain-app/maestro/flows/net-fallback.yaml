@@ -1,0 +1,19 @@
+appId: com.avelts.lain
+tags:
+  - fallback
+  - p0
+---
+- launchApp
+- tapOn:
+    id: scene-break-button
+- extendedWaitUntil:
+    visible:
+      id: scene-preview-awp-status-error
+    timeout: 10000
+- assertVisible: Scene unavailable
+- tapOn:
+    id: scene-preview-awp-retry-button
+- extendedWaitUntil:
+    visible:
+      id: scene-preview-awp-status-ready
+    timeout: 15000

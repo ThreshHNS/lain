@@ -1,0 +1,16 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - p0
+---
+- launchApp
+- copyTextFrom:
+    id: scene-version-label
+- evalScript: ${output.beforeVersion = maestro.copiedText}
+- tapOn:
+    id: scene-reload-button
+- copyTextFrom:
+    id: scene-version-label
+- assertTrue:
+    condition: ${output.beforeVersion != maestro.copiedText}
+    label: Cache bust token changed after reload

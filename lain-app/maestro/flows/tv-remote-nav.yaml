@@ -1,0 +1,22 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - tv
+  - p0
+---
+- launchApp
+- assertVisible:
+    id: scene-active-mode-awp
+- pressKey: Remote Dpad Right
+- pressKey: Remote Dpad Center
+- assertVisible:
+    id: scene-active-mode-slasher
+- pressKey: Remote Dpad Left
+- pressKey: Remote Dpad Center
+- assertVisible:
+    id: game-screen
+- pressKey: back
+- assertVisible:
+    id: scene-feed-screen
+- assertVisible:
+    id: scene-active-mode-slasher

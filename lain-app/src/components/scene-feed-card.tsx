@@ -10,7 +10,10 @@ type SceneFeedCardProps = {
   active: boolean;
   height: number;
   onPlay: (mode: Mode) => void;
+  onRetry?: () => void;
   scene: SceneOption;
+  statusTestID?: string;
+  retryTestID?: string;
   uri: string;
 };
 
@@ -18,14 +21,24 @@ export default function SceneFeedCard({
   active,
   height,
   onPlay,
+  onRetry,
   scene,
+  statusTestID,
+  retryTestID,
   uri,
 }: SceneFeedCardProps) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.page, { height }]} testID={`scene-card-${scene.id}`}>
-      <SceneFrame interactive={false} testID={`scene-preview-${scene.id}`} uri={uri} />
+      <SceneFrame
+        interactive={false}
+        onRetry={onRetry}
+        retryTestID={retryTestID}
+        statusTestID={statusTestID}
+        testID={`scene-preview-${scene.id}`}
+        uri={uri}
+      />
 
       <View pointerEvents="none" style={styles.scrim} />
 
