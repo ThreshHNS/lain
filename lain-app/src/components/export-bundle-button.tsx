@@ -1,20 +1,20 @@
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 import { useSceneEditor } from '@/context/scene-editor-context';
-import { exportSceneBundle } from '@/lib/scene-export';
+import { exportDraft } from '@/lib/api/scene-draft';
 
 export default function ExportBundleButton() {
-  const { slotHint, assets, history } = useSceneEditor();
+  const { slotHint, assets, history, sessionId } = useSceneEditor();
 
   const handleExport = async () => {
+    if (!sessionId) {
+      Alert.alert('Export not ready', 'Session is still initializing');
+      return;
+    }
+
     try {
-      const { uri } = await exportSceneBundle({
-        title: 'Scene selector draft',
-        slotHint,
-        assets,
-        history,
-      });
-      Alert.alert('Bundle ready', `Manifest saved to:\n${uri}`);
-    } catch (error) {
+      const payload = await exportDraft(sessionId, assets);
+      Alert.alert('Bundle ready', `Manifest exported with ${payload.manifest.assets.length} assets`);
+    } catch (error: unknown) {
       Alert.alert('Export failed', `${error}`);
     }
   };
