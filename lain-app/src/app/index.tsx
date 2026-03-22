@@ -21,6 +21,7 @@ import {
 } from '@/lib/scene-config';
 import AppHeader from '@/components/app-header';
 import AssetPicker from '@/components/asset-picker';
+import ExportBundleButton from '@/components/export-bundle-button';
 import HistoryPanel from '@/components/history-panel';
 import { SceneEditorProvider, useSceneEditor } from '@/context/scene-editor-context';
 
@@ -75,6 +76,7 @@ function HomeScreenContent() {
       <AppHeader sceneTitle="Scene selector" />
       <HistoryPanel entries={history} />
       <AssetPicker />
+      <ExportBundleButton />
 
       <FlatList
         contentInsetAdjustmentBehavior="never"
