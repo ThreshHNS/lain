@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>tomato-plant</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111722; overflow: hidden; font-family: monospace; }
+  #renderCanvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  #scanlines, #vignette, #damage, #reggae {
+    position: fixed; inset: 0; pointer-events: none;
+  }
+  #scanlines {
+    z-index: 10;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 3px);
+  }
+  #vignette {
+    z-index: 11;
+    background: radial-gradient(circle at center, transparent 46%, rgba(0,0,0,0.58) 100%);
+  }
+  #damage { z-index: 12; background: rgba(180, 0, 0, 0); }
+  #reggae {
+    z-index: 13;
+    background: transparent;
+    mix-blend-mode: screen;
+    opacity: 0;
+  }
+  #title, #hud, #legend, #stolenBanner {
+    position: fixed; z-index: 20; pointer-events: none; text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+  }
+  #title {
+    top: 18px; left: 50%; transform: translateX(-50%);
+    color: #d8e2ef; font-size: 12px; letter-spacing: 6px;
+  }
+  #hud {
+    left: 18px; bottom: 18px; color: #ffd4a3; font-size: 10px; letter-spacing: 2px;
+  }
+  #legend {
+    right: 18px; bottom: 18px; color: #a9b5c6; font-size: 9px; letter-spacing: 2px; line-height: 1.7; text-align: right;
+  }
+  #stolenBanner {
+    left: 50%;
+    top: 50%;
+    z-index: 24;
+    color: #f7f3e8;
+    font-size: 26px;
+    letter-spacing: 6px;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
+    transition: opacity 140ms linear;
+  }
+  #stolenBanner.active {
+    opacity: 1;
+    animation: stolenPulse 0.9s ease-in-out infinite alternate;
+  }
+  @keyframes stolenPulse {
+    from { transform: translate(-50%, -50%) scale(0.96); filter: brightness(0.95); }
+    to { transform: translate(-50%, -50%) scale(1.02); filter: brightness(1.15); }
+  }
+</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="damage"></div>
+<div id="reggae"></div>
+<div id="title">tomato-plant</div>
+<div id="hud">STOPPED 0 // ANDREY 0 // HP 6</div>
+<div id="legend">WASD MOVE<br>SPACE OR ENTER ATTACK<br>SHIFT OR RMB BLOCK</div>
+<div id="stolenBanner">Ваши помидоры украли</div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="../engine/sprite.js"></script>
+<script src="../engine/gestures.js"></script>
+
+<script>
+const canvas = document.getElementById('renderCanvas');
+const engine = new BABYLON.Engine(canvas, false, { preserveDrawingBuffer: true, stencil: true, antialias: false });
+engine.setHardwareScalingLevel(4);
+
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(1, 1, 1, 1);
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.032;
+scene.fogColor = new BABYLON.Color3(1, 1, 1);
+scene.ambientColor = new BABYLON.Color3(0.21, 0.215, 0.22);
+
+const cameraOffset = new BABYLON.Vector3(0, 15.5, -16.5);
+const cameraTarget = new BABYLON.Vector3(8.8, 1.1, 0);
+const camera = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(8.8, 15.5, -16.5), scene);
+camera.setTarget(cameraTarget);
+camera.minZ = 0.1;
+camera.maxZ = 60;
+
+const moon = new BABYLON.HemisphericLight('moon', new BABYLON.Vector3(0.1, 1, -0.2), scene);
+moon.intensity = 0.54;
+moon.diffuse = new BABYLON.Color3(0.92, 0.94, 0.96);
+moon.groundColor = new BABYLON.Color3(0.15, 0.15, 0.16);
+
+const backGlow = new BABYLON.PointLight('backGlow', new BABYLON.Vector3(-15, 4, 0), scene);
+backGlow.intensity = 0.58;
+backGlow.diffuse = new BABYLON.Color3(0.84, 0.9, 0.96);
+backGlow.range = 20;
+
+const guardLamp = new BABYLON.PointLight('guardLamp', new BABYLON.Vector3(8, 2.4, 0), scene);
+guardLamp.intensity = 1.82;
+guardLamp.diffuse = new BABYLON.Color3(1.0, 0.94, 0.87);
+guardLamp.range = 16;
+
+const pipeline = new BABYLON.DefaultRenderingPipeline('pp', false, scene, [camera]);
+pipeline.bloomEnabled = true;
+pipeline.bloomThreshold = 0.42;
+pipeline.bloomWeight = 0.32;
+pipeline.bloomKernel = 18;
+pipeline.bloomScale = 0.45;
+pipeline.chromaticAberrationEnabled = true;
+pipeline.chromaticAberration.aberrationAmount = 1.1;
+pipeline.grainEnabled = true;
+pipeline.grain.intensity = 10;
+pipeline.grain.animated = true;
+
+function c(r, g, b) { return new BABYLON.Color3(r, g, b); }
+function mat(name, rgb, em) {
+  const m = new BABYLON.StandardMaterial(name, scene);
+  m.diffuseColor = c(rgb[0], rgb[1], rgb[2]);
+  m.specularColor = c(0.03, 0.03, 0.03);
+  m.specularPower = 4;
+  m.emissiveColor = em ? c(em[0], em[1], em[2]) : c(0, 0, 0);
+  return m;
+}
+
+const mats = {
+  ground: mat('ground', [0.12, 0.16, 0.17]),
+  field: mat('field', [0.16, 0.19, 0.14]),
+  soil: mat('soil', [0.29, 0.18, 0.12]),
+  edge: mat('edge', [0.38, 0.28, 0.18]),
+  stem: mat('stem', [0.22, 0.42, 0.16]),
+  leaf: mat('leaf', [0.14, 0.33, 0.12]),
+  tomato: mat('tomato', [0.62, 0.08, 0.08], [0.18, 0.02, 0.02]),
+  fence: mat('fence', [0.27, 0.29, 0.32]),
+  guardCoat: mat('guardCoat', [0.17, 0.36, 0.31]),
+  guardSkin: mat('guardSkin', [0.7, 0.58, 0.46]),
+  guardHat: mat('guardHat', [0.1, 0.1, 0.12]),
+  thiefCloth: mat('thiefCloth', [0.18, 0.12, 0.22]),
+  thiefSkin: mat('thiefSkin', [0.62, 0.52, 0.41]),
+  sack: mat('sack', [0.36, 0.3, 0.18]),
+  attack: mat('attack', [1.0, 0.7, 0.15], [0.42, 0.12, 0.02])
+};
+mats.attack.alpha = 0.34;
+
+BABYLON.MeshBuilder.CreateGround('ground', { width: 40, height: 28 }, scene).material = mats.ground;
+const field = BABYLON.MeshBuilder.CreateGround('field', { width: 32, height: 22 }, scene);
+field.position.y = 0.02;
+field.material = mats.field;
+
+function fenceLine(axis, fixed, from, to, step) {
+  for (let v = from; v <= to; v += step) {
+    const post = BABYLON.MeshBuilder.CreateBox('post', { width: 0.24, depth: 0.24, height: 1.4 }, scene);
+    if (axis === 'x') post.position.set(fixed, 0.7, v);
+    else post.position.set(v, 0.7, fixed);
+    post.material = mats.fence;
+  }
+}
+fenceLine('z', -11.2, -16, 16, 1.9);
+fenceLine('z', 11.2, -16, 16, 1.9);
+fenceLine('x', -16.2, -9, 9, 1.8);
+fenceLine('x', 16.2, -9, -2.6, 1.8);
+fenceLine('x', 16.2, 2.6, 9, 1.8);
+
+const tomatoSpots = [];
+const tomatoScaleVariants = [3.0, 3.64, 4.28, 5.0];
+
+function shuffle(list) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = list[i];
+    list[i] = list[j];
+    list[j] = tmp;
+  }
+  return list;
+}
+
+function registerTomatoSpot(x, z, scale, rotationY) {
+  tomatoSpots.push({
+    x,
+    y: 1.12,
+    z,
+    scale,
+    rotationY,
+    seed: Math.random() * Math.PI * 2,
+    mesh: null
+  });
+}
+
+function createPatch(index, z) {
+  const patch = { index, z };
+  const bed = BABYLON.MeshBuilder.CreateBox('bed' + index, { width: 24.8, depth: 6.2, height: 0.34 }, scene);
+  bed.position.set(0, 0.18, z);
+  bed.material = mats.soil;
+
+  const rim = BABYLON.MeshBuilder.CreateBox('rim' + index, { width: 25.2, depth: 6.6, height: 0.08 }, scene);
+  rim.position.set(0, 0.04, z);
+  rim.material = mats.edge;
+
+  const rowOffsets = [-1.84, 1.84];
+  const columns = [-8.8, -2.9, 2.9, 8.8];
+  const scaleBag = shuffle([0, 1, 2, 3, 1, 2, 3, 0]);
+  let plantIndex = 0;
+  for (let row = 0; row < rowOffsets.length; row++) {
+    for (let col = 0; col < columns.length; col++) {
+      const x = columns[col] + (Math.random() - 0.5) * 0.32;
+      const rowBias = row === 0 ? -0.1 : 0.1;
+      const plantZ = z + rowOffsets[row] + rowBias + (Math.random() - 0.5) * 0.22;
+      const scaleVariant = tomatoScaleVariants[scaleBag[plantIndex % scaleBag.length]];
+      const scale = scaleVariant + (Math.random() - 0.5) * 0.12;
+      const rotationY = Math.PI / 2 + (Math.random() - 0.5) * 0.28;
+      registerTomatoSpot(x, plantZ, scale, rotationY);
+      plantIndex += 1;
+    }
+  }
+  return patch;
+}
+
+const patches = [createPatch(0, -6.4), createPatch(1, 0), createPatch(2, 6.4)];
+
+BABYLON.SceneLoader.ImportMesh('', '../assets/models/', 'tomato_plant.glb', scene, function(meshes) {
+  const sourceMesh = meshes.find(function(mesh) {
+    return mesh.getTotalVertices && mesh.getTotalVertices() > 0;
+  });
+  if (!sourceMesh) return;
+
+  meshes.forEach(function(mesh) {
+    mesh.isPickable = false;
+    mesh.alwaysSelectAsActiveMesh = false;
+  });
+
+  sourceMesh.name = 'tomatoPlantSource';
+  sourceMesh.isVisible = false;
+  sourceMesh.position.set(0, -200, 0);
+  sourceMesh.rotation.y = 0;
+  sourceMesh.scaling.setAll(1);
+  if (sourceMesh.material) {
+    sourceMesh.material = sourceMesh.material.clone('tomatoPlantMaterial');
+    sourceMesh.material.backFaceCulling = false;
+    if ('fogEnabled' in sourceMesh.material) sourceMesh.material.fogEnabled = false;
+    if ('albedoColor' in sourceMesh.material) {
+      sourceMesh.material.albedoColor = c(0.22, 0.5, 0.16);
+      sourceMesh.material.emissiveColor = c(0.08, 0.16, 0.05);
+      sourceMesh.material.metallic = 0;
+      sourceMesh.material.roughness = 1;
+    }
+    if ('diffuseColor' in sourceMesh.material) {
+      sourceMesh.material.diffuseColor = c(0.22, 0.5, 0.16);
+      sourceMesh.material.emissiveColor = c(0.08, 0.16, 0.05);
+    }
+    if ('specularColor' in sourceMesh.material) sourceMesh.material.specularColor = c(0.03, 0.03, 0.03);
+    sourceMesh.material.freeze();
+  }
+
+  for (let i = 0; i < tomatoSpots.length; i++) {
+    const spot = tomatoSpots[i];
+    const mesh = sourceMesh.createInstance('tomatoPlant_' + i);
+    mesh.isPickable = false;
+    mesh.alwaysSelectAsActiveMesh = false;
+    mesh.setEnabled(true);
+    mesh.position.set(spot.x, spot.y, spot.z);
+    mesh.rotation.y = spot.rotationY;
+    mesh.scaling.setAll(spot.scale);
+    spot.mesh = mesh;
+  }
+});
+
+function createGuard() {
+  const root = new BABYLON.TransformNode('guard', scene);
+  const torso = BABYLON.MeshBuilder.CreateBox('torso', { width: 1.15, height: 1.5, depth: 0.7 }, scene);
+  torso.parent = root;
+  torso.position.y = 1.5;
+  torso.material = mats.guardCoat;
+  const head = BABYLON.MeshBuilder.CreateSphere('head', { diameter: 0.72, segments: 6 }, scene);
+  head.parent = root;
+  head.position.set(0, 2.52, 0.12);
+  head.material = mats.guardSkin;
+  const hat = BABYLON.MeshBuilder.CreateCylinder('hat', { height: 0.4, diameterTop: 0.18, diameterBottom: 1.0, tessellation: 5 }, scene);
+  hat.parent = root;
+  hat.position.y = 2.9;
+  hat.material = mats.guardHat;
+  const leftArm = BABYLON.MeshBuilder.CreateBox('leftArm', { width: 0.26, height: 1.0, depth: 0.26 }, scene);
+  leftArm.parent = root;
+  leftArm.position.set(-0.76, 1.55, 0);
+  leftArm.material = mats.guardSkin;
+  const rightArm = leftArm.clone('rightArm');
+  rightArm.parent = root;
+  rightArm.position.x = 0.76;
+  const leftLeg = BABYLON.MeshBuilder.CreateBox('leftLeg', { width: 0.34, height: 1.0, depth: 0.34 }, scene);
+  leftLeg.parent = root;
+  leftLeg.position.set(-0.24, 0.5, 0);
+  leftLeg.material = mats.guardHat;
+  const rightLeg = leftLeg.clone('rightLeg');
+  rightLeg.parent = root;
+  rightLeg.position.x = 0.24;
+  const staff = BABYLON.MeshBuilder.CreateCylinder('staff', { height: 1.8, diameter: 0.08, tessellation: 4 }, scene);
+  staff.parent = root;
+  staff.position.set(0.92, 1.7, 0.36);
+  staff.rotation.x = Math.PI / 3;
+  staff.material = mats.edge;
+  root.position.set(8.8, 0, 0);
+  return { root, leftArm, rightArm, leftLeg, rightLeg };
+}
+
+function createThief(id, patch) {
+  const root = new BABYLON.TransformNode('thief' + id, scene);
+  const torso = BABYLON.MeshBuilder.CreateBox('tTorso', { width: 0.9, height: 1.15, depth: 0.64 }, scene);
+  torso.parent = root;
+  torso.position.set(0, 1.2, 0.1);
+  torso.material = mats.thiefCloth;
+  const head = BABYLON.MeshBuilder.CreateSphere('tHead', { diameter: 0.58, segments: 6 }, scene);
+  head.parent = root;
+  head.position.set(0, 2.0, 0.12);
+  head.material = mats.thiefSkin;
+  const leftArm = BABYLON.MeshBuilder.CreateBox('tArmL', { width: 0.22, height: 0.88, depth: 0.22 }, scene);
+  leftArm.parent = root;
+  leftArm.position.set(-0.62, 1.18, 0.02);
+  leftArm.material = mats.thiefSkin;
+  const rightArm = leftArm.clone('tArmR');
+  rightArm.parent = root;
+  rightArm.position.x = 0.62;
+  const leftLeg = BABYLON.MeshBuilder.CreateBox('tLegL', { width: 0.28, height: 0.9, depth: 0.28 }, scene);
+  leftLeg.parent = root;
+  leftLeg.position.set(-0.2, 0.45, 0);
+  leftLeg.material = mats.thiefCloth;
+  const rightLeg = leftLeg.clone('tLegR');
+  rightLeg.parent = root;
+  rightLeg.position.x = 0.2;
+  const sack = BABYLON.MeshBuilder.CreateBox('sack', { width: 0.7, height: 0.74, depth: 0.44 }, scene);
+  sack.parent = root;
+  sack.position.set(0, 1.3, -0.42);
+  sack.rotation.x = -0.2;
+  sack.material = mats.sack;
+  const carry = BABYLON.MeshBuilder.CreateSphere('carry', { diameter: 0.28, segments: 6 }, scene);
+  carry.parent = root;
+  carry.position.set(0.28, 1.06, 0.34);
+  carry.material = mats.tomato;
+  carry.setEnabled(false);
+  root.position.set(17.2, 0, patch.z + (Math.random() - 0.5) * 0.6);
+  root.rotation.y = -Math.PI / 2;
+  return { id, patch, root, leftArm, rightArm, leftLeg, rightLeg, carry, fruit: null, state: 'approach', pathIndex: 0, speed: 3.0 + Math.random() * 0.5, stealTimer: 0 };
+}
+
+function wrap(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }
+function turn(node, target, rate, dtS) { node.rotation.y += wrap(target - node.rotation.y) * Math.min(1, rate * dtS); }
+function move(node, tx, tz, speed, dtS) {
+  const dx = tx - node.position.x;
+  const dz = tz - node.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist > 0.001) {
+    node.position.x += (dx / dist) * speed * dtS;
+    node.position.z += (dz / dist) * speed * dtS;
+  }
+  return dist;
+}
+function aim(tx, tz, x, z) { return Math.atan2(tx - x, tz - z); }
+
+const hudEl = document.getElementById('hud');
+const damageEl = document.getElementById('damage');
+const reggaeEl = document.getElementById('reggae');
+const stolenBannerEl = document.getElementById('stolenBanner');
+const titleEl = document.getElementById('title');
+const legendEl = document.getElementById('legend');
+const guard = createGuard();
+guard.root.getChildMeshes().forEach(function(mesh) { mesh.isVisible = false; });
+legendEl.style.display = 'none';
+const playerSprite = PSXSprite(scene, {
+  name: 'jmyh_player',
+  texture: '../assets/sprites/jmyh.png',
+  cellW: 507,
+  cellH: 576,
+  cols: 9,
+  rows: 1,
+  width: 4.8,
+  height: 3.9,
+  pos: [guard.root.position.x, 2.15, guard.root.position.z],
+  anims: {
+    sit: [0, 3],
+    walk: [4, 6],
+    attack: [7, 8]
+  }
+});
+const attackWave = BABYLON.MeshBuilder.CreateTorus('attackWave', { diameter: 6.2, thickness: 0.12, tessellation: 18 }, scene);
+attackWave.rotation.x = Math.PI / 2;
+attackWave.position.y = 0.1;
+attackWave.material = mats.attack;
+attackWave.isVisible = false;
+
+const horrors = [];
+const keys = {};
+let stopped = 0;
+let guardHP = 6;
+const maxHorrors = 1;
+const horrorSpawnDelay = 1000;
+let horrorTimer = 0;
+let swingTimer = 0;
+let swingCooldown = 0;
+let damageFlash = 0;
+let playerFacing = 0;
+let playerAnim = 'sit';
+let isRespawning = false;
+let respawnTimer = 0;
+let mouseBlock = false;
+let isBlocking = false;
+let reggaeTimer = 0;
+let reggaeDuration = 1;
+let reggaeStrength = 0;
+let hudSignalTimer = 1.8;
+let hudOpacity = 1;
+let titleTimer = 2.2;
+
+function setPlayerAnim(next) {
+  if (playerAnim === next) return;
+  playerAnim = next;
+  if (next === 'walk') playerSprite.play('walk', 8);
+  else if (next === 'attack') playerSprite.play('attack', 7);
+  else playerSprite.play('sit', 2);
+}
+
+setPlayerAnim('sit');
+
+window.addEventListener('keydown', e => { keys[e.code] = true; });
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+const gestureInput = PSXGestures(canvas, {
+  moveRadius: 92,
+  onTap: () => {
+    hudSignalTimer = Math.max(hudSignalTimer, 1.2);
+    swat();
+  }
+});
+window.addEventListener('blur', () => {
+  Object.keys(keys).forEach(k => { keys[k] = false; });
+  mouseBlock = false;
+  isBlocking = false;
+});
+
+function clearHorrors() {
+  for (let i = horrors.length - 1; i >= 0; i--) horrors[i].psx.dispose();
+  horrors.length = 0;
+}
+
+function triggerReggae(strength, duration) {
+  reggaeStrength = Math.max(reggaeStrength, strength);
+  reggaeDuration = Math.max(1, duration || 280);
+  reggaeTimer = reggaeDuration;
+}
+
+function spawnHorror() {
+  if (horrors.length >= maxHorrors) return;
+  const edge = Math.floor(Math.random() * 3);
+  const pos = edge === 0 ? [Math.random() * 8 - 14, -12.8] : edge === 1 ? [Math.random() * 8 - 14, 12.8] : [-18, Math.random() * 18 - 9];
+  const sprite = PSXSprite(scene, {
+    name: 'andrey_' + horrors.length + '_' + Date.now(),
+    texture: '../assets/sprites/andrey_livan_enemy.png',
+    cellW: 260, cellH: 576, cols: 8, rows: 1,
+    width: 5.2, height: 4.3, pos: [pos[0], 2.15, pos[1]],
+    anims: { walk: [1, 2], attack: [3, 7], pain: [0, 0], death: [0, 0] }
+  });
+  sprite.play('walk', 6);
+  horrors.push({ psx: sprite, hp: 3, speed: 3.6 + Math.random() * 0.5, hitTimer: 0, attackCD: 0, seed: Math.random() * Math.PI * 2 });
+}
+
+function finishRespawn() {
+  guardHP = 6;
+  guard.root.position.set(8.8, 0, 0);
+  playerFacing = 0;
+  swingTimer = 0;
+  swingCooldown = 0;
+  damageFlash = 0;
+  horrorTimer = 0;
+  isRespawning = false;
+  respawnTimer = 0;
+  stolenBannerEl.classList.remove('active');
+  clearHorrors();
+  setPlayerAnim('sit');
+  cameraTarget.x = guard.root.position.x;
+  cameraTarget.y = 1.1;
+  cameraTarget.z = guard.root.position.z;
+  camera.position.x = guard.root.position.x + cameraOffset.x;
+  camera.position.y = guard.root.position.y + cameraOffset.y;
+  camera.position.z = guard.root.position.z + cameraOffset.z;
+  camera.setTarget(cameraTarget);
+}
+
+function startRespawn() {
+  if (isRespawning) return;
+  isRespawning = true;
+  respawnTimer = 2000;
+  guardHP = 0;
+  swingTimer = 0;
+  swingCooldown = 0;
+  damageFlash = 0.8;
+  triggerReggae(1.0, 700);
+  stolenBannerEl.classList.add('active');
+  setPlayerAnim('sit');
+  hudSignalTimer = Math.max(hudSignalTimer, 2.2);
+  Object.keys(keys).forEach(k => { keys[k] = false; });
+}
+
+function swat() {
+  if (isRespawning || isBlocking || swingCooldown > 0) return;
+  swingCooldown = 360;
+  swingTimer = 150;
+  setPlayerAnim('attack');
+  hudSignalTimer = Math.max(hudSignalTimer, 1.3);
+  let hit = false;
+
+  for (let i = horrors.length - 1; i >= 0; i--) {
+    const horror = horrors[i];
+    const dx = horror.psx.spr.position.x - guard.root.position.x;
+    const dz = horror.psx.spr.position.z - guard.root.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist <= 3.4) {
+      horror.hp -= 1;
+      horror.hitTimer = 260;
+      horror.psx.play('pain', 10);
+      if (dist > 0.1) {
+        horror.psx.spr.position.x += (dx / dist) * 1.1;
+        horror.psx.spr.position.z += (dz / dist) * 1.1;
+      }
+      if (horror.hp <= 0) {
+        horror.psx.dispose();
+        horrors.splice(i, 1);
+        stopped += 1;
+        horrorTimer = horrorSpawnDelay;
+      }
+      hit = true;
+    }
+  }
+
+  if (hit) {
+    pipeline.chromaticAberration.aberrationAmount = 4.5;
+    pipeline.bloomWeight = 0.8;
+    triggerReggae(0.95, 260);
+  }
+}
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  if (e.button === 2) {
+    mouseBlock = true;
+  }
+});
+window.addEventListener('pointerup', e => {
+  if (e.button === 2) mouseBlock = false;
+});
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') {
+    e.preventDefault();
+    swat();
+  }
+});
+
+spawnHorror();
+
+let t = 0;
+scene.registerBeforeRender(() => {
+  const dt = engine.getDeltaTime();
+  const dtS = dt * 0.001;
+  t += dtS;
+  hudSignalTimer = Math.max(0, hudSignalTimer - dtS);
+  titleTimer = Math.max(0, titleTimer - dtS);
+
+  if (isRespawning) {
+    respawnTimer -= dt;
+    if (respawnTimer <= 0) finishRespawn();
+  } else if (horrors.length === 0) {
+    horrorTimer -= dt;
+    if (horrorTimer <= 0) {
+      horrorTimer = horrorSpawnDelay;
+      spawnHorror();
+    }
+  }
+
+  let mx = 0, mz = 0;
+  const gestureMove = gestureInput.getMoveVector();
+  isBlocking = !isRespawning && (mouseBlock || gestureInput.isHolding() || keys['ShiftLeft'] || keys['ShiftRight']);
+  if (!isRespawning) {
+    if (keys['KeyW']) mz += 1;
+    if (keys['KeyS']) mz -= 1;
+    if (keys['KeyA']) mx -= 1;
+    if (keys['KeyD']) mx += 1;
+    if (gestureMove.active) {
+      mx += gestureMove.x;
+      mz += -gestureMove.y;
+      hudSignalTimer = Math.max(hudSignalTimer, 0.9);
+    }
+  }
+  let moveLen = Math.sqrt(mx * mx + mz * mz);
+  if (moveLen > 0.001) {
+    mx /= moveLen;
+    mz /= moveLen;
+    const moveSpeed = isBlocking ? 3.4 : 5.9;
+    guard.root.position.x = Math.max(-15.2, Math.min(15.2, guard.root.position.x + mx * moveSpeed * dtS));
+    guard.root.position.z = Math.max(-10.2, Math.min(10.2, guard.root.position.z + mz * moveSpeed * dtS));
+    playerFacing = Math.atan2(mx, mz);
+    turn(guard.root, playerFacing, 11, dtS);
+  }
+
+  swingCooldown = Math.max(0, swingCooldown - dt);
+  swingTimer = Math.max(0, swingTimer - dt);
+  if (swingTimer > 0) {
+    attackWave.isVisible = true;
+    attackWave.position.x = guard.root.position.x;
+    attackWave.position.z = guard.root.position.z;
+    attackWave.scaling.setAll(1 + (1 - swingTimer / 150) * 0.18);
+    mats.attack.alpha = 0.34 * (swingTimer / 150);
+  } else {
+    attackWave.isVisible = false;
+    mats.attack.alpha = 0.34;
+  }
+
+  if (swingTimer <= 0) {
+    if (isRespawning) setPlayerAnim('sit');
+    else if (isBlocking) setPlayerAnim('sit');
+    else if (moveLen > 0.001) setPlayerAnim('walk');
+    else setPlayerAnim('sit');
+  }
+
+  const swing = moveLen > 0.001 ? Math.sin(t * 10) * 0.55 : 0;
+  guard.leftLeg.rotation.x = swing;
+  guard.rightLeg.rotation.x = -swing;
+  guard.leftArm.rotation.x = -swing * 0.7;
+  guard.rightArm.rotation.x = swingTimer > 0 ? -1.1 + (swingTimer / 150) * 0.7 : swing * 0.7;
+  guardLamp.position.set(guard.root.position.x, 2.4, guard.root.position.z);
+  guardLamp.intensity = 1.74 + Math.sin(t * 11) * 0.08;
+
+  cameraTarget.x += (guard.root.position.x - cameraTarget.x) * 0.12;
+  cameraTarget.y += ((1.1) - cameraTarget.y) * 0.12;
+  cameraTarget.z += (guard.root.position.z - cameraTarget.z) * 0.12;
+  camera.position.x += ((guard.root.position.x + cameraOffset.x) - camera.position.x) * 0.12;
+  camera.position.y += ((guard.root.position.y + cameraOffset.y) - camera.position.y) * 0.12;
+  camera.position.z += ((guard.root.position.z + cameraOffset.z) - camera.position.z) * 0.12;
+  camera.setTarget(cameraTarget);
+
+  playerSprite.spr.position.x = guard.root.position.x;
+  playerSprite.spr.position.y = 2.15 + Math.sin(t * 1.6) * 0.04;
+  playerSprite.spr.position.z = guard.root.position.z;
+  playerSprite.setDir(playerFacing);
+  playerSprite.update(dt, camera);
+
+  for (let i = 0; i < tomatoSpots.length; i++) {
+    const spot = tomatoSpots[i];
+    const sway = Math.sin(t * 1.15 + spot.seed) * 0.1;
+    const bob = Math.sin(t * 1.9 + spot.seed) * 0.026;
+    if (spot.mesh) {
+      spot.mesh.rotation.y = spot.rotationY + sway;
+      spot.mesh.position.y = spot.y + bob;
+    }
+  }
+
+  for (let i = horrors.length - 1; i >= 0; i--) {
+    const horror = horrors[i];
+    const spr = horror.psx.spr;
+    spr.position.y = 1.35 + Math.sin(t * 4 + horror.seed) * 0.09;
+    if (isRespawning) {
+      horror.psx.play('walk', 4);
+      horror.psx.update(dt, camera);
+      continue;
+    }
+    if (horror.hitTimer > 0) {
+      horror.hitTimer -= dt;
+      if (horror.hitTimer <= 0) horror.psx.play('walk', 4);
+    } else {
+      const dx = guard.root.position.x - spr.position.x;
+      const dz = guard.root.position.z - spr.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > 1.6) {
+        spr.position.x += (dx / dist) * horror.speed * dtS;
+        spr.position.z += (dz / dist) * horror.speed * dtS;
+        horror.psx.play('walk', 4);
+      } else {
+        horror.attackCD -= dt;
+        horror.psx.play('attack', 8);
+        if (horror.attackCD <= 0) {
+          horror.attackCD = 800;
+          if (isBlocking) {
+            damageFlash = Math.max(damageFlash, 0.16);
+            pipeline.chromaticAberration.aberrationAmount = 2.4;
+            pipeline.bloomWeight = 0.58;
+            hudSignalTimer = Math.max(hudSignalTimer, 1.1);
+            triggerReggae(0.55, 180);
+            horror.hitTimer = 220;
+            horror.psx.play('pain', 10);
+            if (dist > 0.1) {
+              spr.position.x -= (dx / dist) * 1.4;
+              spr.position.z -= (dz / dist) * 1.4;
+            }
+          } else {
+            guardHP -= 1;
+            damageFlash = 0.55;
+            pipeline.chromaticAberration.aberrationAmount = 5;
+            pipeline.bloomWeight = 0.9;
+            hudSignalTimer = Math.max(hudSignalTimer, 1.7);
+            triggerReggae(1.0, 320);
+            if (guardHP <= 0) startRespawn();
+          }
+        }
+      }
+    }
+    horror.psx.update(dt, camera);
+  }
+
+  damageFlash = Math.max(0, damageFlash - dtS * 1.6);
+  damageEl.style.background = 'rgba(160,0,0,' + damageFlash.toFixed(3) + ')';
+  if (reggaeTimer > 0) {
+    reggaeTimer = Math.max(0, reggaeTimer - dt);
+    const p = reggaeTimer / reggaeDuration;
+    const alpha = (0.58 * p * reggaeStrength);
+    const stripeA = (0.42 * p * reggaeStrength).toFixed(3);
+    const stripeB = (0.34 * p * reggaeStrength).toFixed(3);
+    const stripeC = (0.38 * p * reggaeStrength).toFixed(3);
+    const shift = Math.sin(t * 20) * 24 * reggaeStrength;
+    reggaeEl.style.opacity = alpha.toFixed(3);
+    reggaeEl.style.transform = 'translateX(' + shift.toFixed(2) + 'px)';
+    reggaeEl.style.background =
+      'linear-gradient(90deg,' +
+      'rgba(255,36,36,' + stripeA + ') 0%,' +
+      'rgba(255,230,64,' + stripeB + ') 38%,' +
+      'rgba(40,255,110,' + stripeC + ') 70%,' +
+      'rgba(255,36,36,' + stripeA + ') 100%)';
+    if (reggaeTimer <= 0) {
+      reggaeStrength = 0;
+      reggaeEl.style.opacity = '0';
+      reggaeEl.style.transform = '';
+      reggaeEl.style.background = 'transparent';
+    }
+  }
+  pipeline.chromaticAberration.aberrationAmount += (1.1 - pipeline.chromaticAberration.aberrationAmount) * 0.08;
+  pipeline.bloomWeight += (0.48 - pipeline.bloomWeight) * 0.08;
+  backGlow.intensity = 0.42 + Math.sin(t * 0.8) * 0.04;
+  titleEl.style.opacity = (0.72 * Math.min(1, titleTimer / 1.4)).toFixed(3);
+
+  hudEl.textContent =
+    'STOPPED ' + stopped +
+    ' // ANDREY ' + horrors.length +
+    ' // HP ' + guardHP +
+    (isBlocking ? ' // BLOCK' : '') +
+    (isRespawning ? ' // RESPAWN ' + Math.max(0, Math.ceil(respawnTimer / 1000)) : '');
+  const hudTargetOpacity = (isRespawning || isBlocking || guardHP <= 3 || damageFlash > 0.05 || hudSignalTimer > 0) ? 1 : 0.16;
+  hudOpacity += (hudTargetOpacity - hudOpacity) * Math.min(1, dtS * 7);
+  hudEl.style.opacity = hudOpacity.toFixed(3);
+});
+
+engine.runRenderLoop(() => scene.render());
+window.addEventListener('resize', () => engine.resize());
+</script>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  var embedded=p.get('embedded')==='1';
+  var preview=p.get('preview')==='1';
+  if(embedded){
+    var mc=document.getElementById('mode-chip');
+    if(mc)mc.style.display='none';
+  }
+  if(preview){
+    var h=document.getElementById('hud');if(h)h.style.display='none';
+    var hi=document.getElementById('hint');if(hi)hi.style.display='none';
+    var tc=document.getElementById('touch-controls');if(tc)tc.style.display='none';
+  }
+})();
+</script>
+</body>
+</html>

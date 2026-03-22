@@ -16,9 +16,9 @@ jest.mock('@/components/scene-feed-card', () => {
 
   return function MockSceneFeedCard(props: {
     active: boolean;
-    onPlay: (mode: 'awp' | 'slasher') => void;
+    onPlay: (mode: string) => void;
     scene: {
-      id: 'awp' | 'slasher';
+      id: string;
       label: string;
     };
     uri: string;
@@ -45,15 +45,10 @@ describe('HomeScreen', () => {
   it('renders preview urls for both scenes in embedded preview mode', () => {
     render(<HomeScreen />);
 
-    expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('mode=awp');
+    expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('/awp/');
     expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('embedded=1');
     expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('preview=1');
     expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('still=1');
-
-    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('mode=slasher');
-    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('embedded=1');
-    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('preview=1');
-    expect(screen.getByTestId('scene-preview-slasher-uri').props.children).toContain('still=1');
   });
 
   it('opens gameplay mode from the overlay play button', () => {

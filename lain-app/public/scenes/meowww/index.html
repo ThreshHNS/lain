@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>meowww</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: monospace; }
+  #renderCanvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  #scanlines {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.12) 0px, rgba(0,0,0,0.12) 1px, transparent 1px, transparent 3px);
+    pointer-events: none; z-index: 20;
+  }
+  #vignette {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.85) 100%);
+    pointer-events: none; z-index: 21;
+  }
+  #hud {
+    position: fixed; bottom: 16px; left: 16px; z-index: 30; pointer-events: none;
+    color: #cc2200; font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 6px #cc2200;
+  }
+  #glitchFlash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 15;
+    background: transparent; mix-blend-mode: screen;
+  }
+  #dmgFlash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 14;
+    background: rgba(200,0,0,0);
+  }
+  #hitFlash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 16;
+    background: transparent;
+  }
+</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="hud">HP: 100 // KILLS: 0</div>
+<div id="glitchFlash"></div>
+<div id="dmgFlash"></div>
+<div id="hitFlash"></div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="../engine/sprite.js"></script>
+
+<script>
+var canvas = document.getElementById('renderCanvas');
+var engine = new BABYLON.Engine(canvas, false, { preserveDrawingBuffer: true, stencil: true, antialias: false });
+engine.setHardwareScalingLevel(3);
+
+var scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.01, 0.005, 0.02, 1);
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.07;
+scene.fogColor = new BABYLON.Color3(0.015, 0.005, 0.03);
+scene.ambientColor = new BABYLON.Color3(0.02, 0.01, 0.03);
+
+// ── Player ────────────────────────────────────────────────
+var player = PSXSprite(scene, {
+  name: 'player', texture: '../assets/sprites/eretic.png',
+  cellW: 83, cellH: 91, cols: 9, rows: 8,
+  width: 1.8, height: 2.1, pos: [0, 1.05, 0],
+  anims: { walk: [0, 3], attack: [4, 6], pain: [7, 7], death: [8, 8] }
+});
+player.play('walk', 8);
+var playerFacing = 0, playerHP = 100, kills = 0;
+var isAttacking = false, attackTimer = 0;
+var PLAYER_SPEED = 3.2, ATTACK_RANGE = 2.8, ATTACK_DURATION = 400;
+
+// Red torch light on player — only real light source
+var playerLight = new BABYLON.PointLight('pLight', new BABYLON.Vector3(0, 2.5, 0), scene);
+playerLight.diffuse = new BABYLON.Color3(0.9, 0.08, 0.03);
+playerLight.specular = new BABYLON.Color3(0.6, 0.05, 0.02);
+playerLight.intensity = 2.8;
+playerLight.range = 10;
+
+// ── Camera ────────────────────────────────────────────────
+var camera = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3.2, 9, new BABYLON.Vector3(0, 1, 0), scene);
+camera.attachControl(canvas, true);
+camera.lowerRadiusLimit = 4;
+camera.upperRadiusLimit = 14;
+camera.lowerBetaLimit = 0.3;
+camera.upperBetaLimit = Math.PI / 2.1;
+camera.minZ = 0.1;
+camera.maxZ = 40;
+camera.wheelPrecision = 30;
+
+// ── Lights — very dim ────────────────────────────────────
+var ambient = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
+ambient.intensity = 0.04;
+ambient.groundColor = new BABYLON.Color3(0.03, 0.0, 0.05);
+ambient.diffuse = new BABYLON.Color3(0.05, 0.02, 0.08);
+
+function psxMat(name, r, g, b) {
+  var mat = new BABYLON.StandardMaterial(name, scene);
+  mat.diffuseColor = new BABYLON.Color3(r, g, b);
+  mat.specularColor = new BABYLON.Color3(0.02, 0.02, 0.02);
+  mat.specularPower = 2;
+  return mat;
+}
+
+// ── Floor ─────────────────────────────────────────────────
+var ARENA = 60;
+var floor = BABYLON.MeshBuilder.CreateGround('floor', { width: ARENA, height: ARENA, subdivisions: 2 }, scene);
+floor.material = psxMat('floorMat', 0.03, 0.015, 0.04);
+
+var gridMat = new BABYLON.StandardMaterial('grid', scene);
+gridMat.wireframe = true;
+gridMat.emissiveColor = new BABYLON.Color3(0.06, 0.02, 0.1);
+var floorGrid = BABYLON.MeshBuilder.CreateGround('floorGrid', { width: ARENA, height: ARENA, subdivisions: 30 }, scene);
+floorGrid.material = gridMat;
+floorGrid.position.y = 0.01;
+
+// ── Enemy types ───────────────────────────────────────────
+var ENEMY_TYPES = {
+  eretic: {
+    texture: '../assets/sprites/eretic.png',
+    cellW: 83, cellH: 91, cols: 9, rows: 8,
+    width: 1.5, height: 1.8, yPos: 1.0,
+    anims: { walk: [0, 3], attack: [4, 6], pain: [7, 7], death: [8, 8] },
+    hp: 3, speed: 2.0, atkDist: 2.2, atkCD: 1100, atkDmg: 10,
+    walkFps: 8, atkFps: 10
+  },
+  dog: {
+    texture: '../assets/sprites/young_dog_grid.png',
+    cellW: 120, cellH: 96, cols: 8, rows: 8,
+    width: 1.8, height: 1.4, yPos: 0.7,
+    anims: { walk: [0, 3], attack: [4, 5], pain: [6, 6], death: [7, 7] },
+    hp: 2, speed: 3.2, atkDist: 1.8, atkCD: 800, atkDmg: 8,
+    walkFps: 10, atkFps: 14
+  }
+};
+
+// ── Enemy system — wave spawning ─────────────────────────
+var enemies = [];
+var enemyUID = 0;
+var spawnTimer = 0, SPAWN_INTERVAL = 4000;
+var SPAWN_MIN = 2, SPAWN_MAX = 3;
+var MAX_ALIVE = 6;
+
+function rndSpawnPos() {
+  var angle = Math.random() * Math.PI * 2;
+  var dist = 12 + Math.random() * 8;
+  var x = player.spr.position.x + Math.cos(angle) * dist;
+  var z = player.spr.position.z + Math.sin(angle) * dist;
+  x = Math.max(-27, Math.min(27, x));
+  z = Math.max(-27, Math.min(27, z));
+  return [x, z];
+}
+
+function spawnEnemy(x, z) {
+  // Random type: 50/50 eretic vs dog
+  var typeName = Math.random() < 0.5 ? 'eretic' : 'dog';
+  var cfg = ENEMY_TYPES[typeName];
+  var e = PSXSprite(scene, {
+    name: 'enemy_' + enemyUID++,
+    texture: cfg.texture,
+    cellW: cfg.cellW, cellH: cfg.cellH, cols: cfg.cols, rows: cfg.rows,
+    width: cfg.width, height: cfg.height,
+    pos: [x, cfg.yPos, z],
+    anims: cfg.anims
+  });
+  e.play('walk', cfg.walkFps);
+  enemies.push({
+    psx: e, cfg: cfg,
+    hp: cfg.hp, dead: false,
+    facingAngle: 0, state: 'walk',
+    painTimer: 0, fallTimer: -1, atkCD: 0, removeTimer: 0
+  });
+}
+
+function spawnWave() {
+  var alive = 0;
+  enemies.forEach(function(e) { if (!e.dead) alive++; });
+  if (alive >= MAX_ALIVE) return;
+  var count = SPAWN_MIN + Math.floor(Math.random() * (SPAWN_MAX - SPAWN_MIN + 1));
+  count = Math.min(count, MAX_ALIVE - alive);
+  for (var i = 0; i < count; i++) {
+    var pos = rndSpawnPos();
+    spawnEnemy(pos[0], pos[1]);
+  }
+}
+
+// Initial wave
+spawnWave();
+
+// ── Input ─────────────────────────────────────────────────
+var keys = {};
+window.addEventListener('keydown', function(e) { keys[e.code] = true; });
+window.addEventListener('keyup', function(e) { keys[e.code] = false; });
+
+function startAttack() {
+  if (isAttacking) return;
+  isAttacking = true;
+  attackTimer = 0;
+  player.play('attack', 14);
+
+  // Face nearest alive enemy
+  var nearest = null, nearDist = Infinity;
+  enemies.forEach(function(e) {
+    if (e.dead) return;
+    var dx = e.psx.spr.position.x - player.spr.position.x;
+    var dz = e.psx.spr.position.z - player.spr.position.z;
+    var d = Math.sqrt(dx * dx + dz * dz);
+    if (d < nearDist) { nearDist = d; nearest = e; }
+  });
+  if (nearest && nearDist < ATTACK_RANGE * 1.5) {
+    playerFacing = Math.atan2(
+      nearest.psx.spr.position.z - player.spr.position.z,
+      nearest.psx.spr.position.x - player.spr.position.x
+    );
+    player.setDir(playerFacing);
+  }
+
+  // Hit enemies in range
+  var didHit = false;
+  enemies.forEach(function(e) {
+    if (e.dead) return;
+    var dx = e.psx.spr.position.x - player.spr.position.x;
+    var dz = e.psx.spr.position.z - player.spr.position.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < ATTACK_RANGE) {
+      e.hp--;
+      didHit = true;
+      // Knockback
+      if (dist > 0.1) {
+        e.psx.spr.position.x += (dx / dist) * 0.8;
+        e.psx.spr.position.z += (dz / dist) * 0.8;
+      }
+      if (e.hp <= 0) {
+        e.dead = true;
+        e.state = 'dead';
+        e.psx.play('death', 6);
+        e.fallTimer = 0;
+        kills++;
+        triggerGlitch(1.0);
+      } else {
+        e.psx.play('pain', 8);
+        e.painTimer = 300;
+        e.state = 'pain';
+        triggerGlitch(0.6);
+      }
+    }
+  });
+
+  // Hit flash even on miss (swing effect)
+  triggerHitFlash(didHit ? 1.0 : 0.3);
+}
+
+canvas.addEventListener('pointerdown', function() { startAttack(); });
+window.addEventListener('keydown', function(e) { if (e.code === 'Space') startAttack(); });
+
+// ── Glitch + hit effects ──────────────────────────────────
+var glitchFlashEl = document.getElementById('glitchFlash');
+var dmgFlashEl = document.getElementById('dmgFlash');
+var hitFlashEl = document.getElementById('hitFlash');
+var glitchTimer = 0, glitchIntensity = 0, GLITCH_DURATION = 300;
+var dmgFade = 0;
+var hitFlashTimer = 0, hitFlashStr = 0;
+
+function triggerGlitch(intensity) {
+  glitchTimer = GLITCH_DURATION;
+  glitchIntensity = Math.max(glitchIntensity, intensity);
+}
+
+function triggerHitFlash(str) {
+  hitFlashTimer = 120;
+  hitFlashStr = str;
+}
+
+// ── Post-processing ───────────────────────────────────────
+var pipeline = new BABYLON.DefaultRenderingPipeline('pipeline', false, scene, [camera]);
+pipeline.bloomEnabled = true;
+pipeline.bloomThreshold = 0.3;
+pipeline.bloomWeight = 0.4;
+pipeline.bloomKernel = 16;
+pipeline.bloomScale = 0.3;
+pipeline.chromaticAberrationEnabled = true;
+pipeline.chromaticAberration.aberrationAmount = 1;
+pipeline.grainEnabled = true;
+pipeline.grain.intensity = 25;
+pipeline.grain.animated = true;
+
+// ── HUD ───────────────────────────────────────────────────
+var hudEl = document.getElementById('hud');
+var scanlinesEl = document.getElementById('scanlines');
+
+// ── Main loop ─────────────────────────────────────────────
+var t = 0;
+scene.registerBeforeRender(function() {
+  var dt = engine.getDeltaTime();
+  var dtS = dt * 0.001;
+  t += dtS;
+
+  // ── Player movement ───────────────────────────────
+  var fwd = new BABYLON.Vector3(
+    player.spr.position.x - camera.position.x, 0,
+    player.spr.position.z - camera.position.z
+  );
+  if (fwd.length() > 0.001) fwd.normalize();
+  var right = BABYLON.Vector3.Cross(BABYLON.Axis.Y, fwd);
+  if (right.length() > 0.001) right.normalize();
+
+  var moveX = 0, moveZ = 0;
+  if (keys['KeyW']) { moveX += fwd.x; moveZ += fwd.z; }
+  if (keys['KeyS']) { moveX -= fwd.x; moveZ -= fwd.z; }
+  if (keys['KeyA']) { moveX -= right.x; moveZ -= right.z; }
+  if (keys['KeyD']) { moveX += right.x; moveZ += right.z; }
+  var moveLen = Math.sqrt(moveX * moveX + moveZ * moveZ);
+
+  if (moveLen > 0.01 && !isAttacking) {
+    moveX /= moveLen; moveZ /= moveLen;
+    player.spr.position.x += moveX * PLAYER_SPEED * dtS;
+    player.spr.position.z += moveZ * PLAYER_SPEED * dtS;
+    player.spr.position.x = Math.max(-28, Math.min(28, player.spr.position.x));
+    player.spr.position.z = Math.max(-28, Math.min(28, player.spr.position.z));
+    playerFacing = Math.atan2(moveZ, moveX);
+    player.setDir(playerFacing);
+    player.play('walk', 8);
+  } else if (!isAttacking) {
+    player.stop();
+  }
+
+  if (isAttacking) {
+    attackTimer += dt;
+    if (attackTimer >= ATTACK_DURATION) {
+      isAttacking = false;
+      player.play('walk', 8);
+    }
+  }
+
+  player.update(dt, camera);
+
+  // ── Camera follow ─────────────────────────────────
+  camera.target.x = player.spr.position.x;
+  camera.target.y = 1.0;
+  camera.target.z = player.spr.position.z;
+
+  // Player light — flickering torch
+  playerLight.position.x = player.spr.position.x;
+  playerLight.position.y = 2.2;
+  playerLight.position.z = player.spr.position.z;
+  playerLight.intensity = 2.4 + Math.sin(t * 8) * 0.3 + Math.sin(t * 13) * 0.15;
+  playerLight.range = 9 + Math.sin(t * 3) * 1.5;
+
+  // ── Wave spawner ──────────────────────────────────
+  spawnTimer += dt;
+  if (spawnTimer >= SPAWN_INTERVAL) {
+    spawnTimer = 0;
+    spawnWave();
+  }
+
+  // ── Enemy AI ──────────────────────────────────────
+  for (var ei = enemies.length - 1; ei >= 0; ei--) {
+    var e = enemies[ei];
+    if (e.dead) {
+      if (e.fallTimer >= 0 && e.fallTimer < 1000) {
+        e.fallTimer += dt;
+        var fp = Math.min(1, e.fallTimer / 700);
+        e.psx.spr.position.y = e.cfg.yPos - fp * (e.cfg.yPos * 0.8);
+        e.psx.spr.height = e.cfg.height * (1 - fp * 0.65);
+      }
+      e.removeTimer += dt;
+      if (e.removeTimer > 3500) {
+        e.psx.dispose();
+        enemies.splice(ei, 1);
+        continue;
+      }
+      e.psx.update(dt, camera);
+      continue;
+    }
+
+    var dx = player.spr.position.x - e.psx.spr.position.x;
+    var dz = player.spr.position.z - e.psx.spr.position.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    var targetAngle = Math.atan2(dz, dx);
+
+    var angDiff = targetAngle - e.facingAngle;
+    while (angDiff > Math.PI) angDiff -= 2 * Math.PI;
+    while (angDiff < -Math.PI) angDiff += 2 * Math.PI;
+    e.facingAngle += angDiff * Math.min(1, 4.0 * dtS);
+    e.psx.setDir(e.facingAngle);
+
+    if (e.state === 'pain') {
+      e.painTimer -= dt;
+      if (e.painTimer <= 0) { e.state = 'walk'; e.psx.play('walk', e.cfg.walkFps); }
+      e.psx.update(dt, camera);
+      continue;
+    }
+
+    if (dist > e.cfg.atkDist) {
+      if (e.state !== 'walk') { e.state = 'walk'; e.psx.play('walk', e.cfg.walkFps); }
+      e.psx.spr.position.x += (dx / dist) * e.cfg.speed * dtS;
+      e.psx.spr.position.z += (dz / dist) * e.cfg.speed * dtS;
+    } else {
+      if (e.state !== 'attack') { e.state = 'attack'; e.psx.play('attack', e.cfg.atkFps); }
+      e.atkCD -= dt;
+      if (e.atkCD <= 0) {
+        e.atkCD = e.cfg.atkCD;
+        playerHP = Math.max(0, playerHP - e.cfg.atkDmg);
+        dmgFade = 0.55;
+        triggerGlitch(0.4);
+      }
+    }
+
+    e.psx.update(dt, camera);
+  }
+
+  // ── Glitch effect ─────────────────────────────────
+  if (glitchTimer > 0) {
+    glitchTimer -= dt;
+    var gP = Math.max(0, glitchTimer / GLITCH_DURATION);
+    var gS = gP * glitchIntensity;
+    pipeline.chromaticAberration.aberrationAmount = 1 + gS * 50;
+    pipeline.grain.intensity = 25 + gS * 100;
+    pipeline.bloomWeight = 0.4 + gS * 2.0;
+    // Screen tear effect — shift scanlines
+    var jitter = gS > 0.2 ? (Math.random() - 0.5) * 10 : 0;
+    scanlinesEl.style.transform = 'translateX(' + jitter + 'px) translateY(' + (jitter * 0.5) + 'px)';
+    // Purple/white flash
+    var fA = gP > 0.5 ? (gP - 0.5) * 2 : 0;
+    glitchFlashEl.style.background = 'rgba(160,20,255,' + (fA * 0.4 * glitchIntensity).toFixed(3) + ')';
+    if (glitchTimer <= 0) {
+      glitchIntensity = 0;
+      pipeline.chromaticAberration.aberrationAmount = 1;
+      pipeline.grain.intensity = 25;
+      pipeline.bloomWeight = 0.4;
+      glitchFlashEl.style.background = 'transparent';
+      scanlinesEl.style.transform = '';
+    }
+  }
+
+  // Hit flash — brief white strobe on swing
+  if (hitFlashTimer > 0) {
+    hitFlashTimer -= dt;
+    var hP = Math.max(0, hitFlashTimer / 120);
+    hitFlashEl.style.background = 'rgba(255,255,255,' + (hP * 0.15 * hitFlashStr).toFixed(3) + ')';
+    if (hitFlashTimer <= 0) hitFlashEl.style.background = 'transparent';
+  }
+
+  // Damage flash
+  if (dmgFade > 0) {
+    dmgFade = Math.max(0, dmgFade - 1.5 * dtS);
+    dmgFlashEl.style.background = 'rgba(180,0,0,' + dmgFade.toFixed(3) + ')';
+  }
+
+  // ── HUD ───────────────────────────────────────────
+  hudEl.textContent = 'HP ' + playerHP + ' // KILLS ' + kills + ' // FPS ' + Math.round(engine.getFps());
+});
+
+engine.runRenderLoop(function() { scene.render(); });
+window.addEventListener('resize', function() { engine.resize(); });
+</script>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  var embedded=p.get('embedded')==='1';
+  var preview=p.get('preview')==='1';
+  if(embedded){
+    var mc=document.getElementById('mode-chip');
+    if(mc)mc.style.display='none';
+  }
+  if(preview){
+    var h=document.getElementById('hud');if(h)h.style.display='none';
+    var hi=document.getElementById('hint');if(hi)hi.style.display='none';
+    var tc=document.getElementById('touch-controls');if(tc)tc.style.display='none';
+  }
+})();
+</script>
+</body>
+</html>

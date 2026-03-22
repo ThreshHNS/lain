@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DUST2 HERETIC RAMPAGE</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: monospace; }
+  #renderCanvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  #scanlines {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.12) 0px, rgba(0,0,0,0.12) 1px, transparent 1px, transparent 3px);
+    pointer-events: none; z-index: 20;
+  }
+  #vignette {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.85) 100%);
+    pointer-events: none; z-index: 21;
+  }
+  #hud {
+    position: fixed; bottom: 16px; left: 16px; z-index: 30; pointer-events: none;
+    color: #ff6600; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    text-shadow: 0 0 8px #ff4400, 0 0 20px #ff2200;
+  }
+  #killMsg {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 35; pointer-events: none; color: #ff0000; font-size: 28px;
+    letter-spacing: 6px; text-shadow: 0 0 20px #ff0000, 0 0 40px #cc0000;
+    opacity: 0; font-weight: bold; text-transform: uppercase;
+  }
+  #waveMsg {
+    position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
+    z-index: 35; pointer-events: none; color: #ffaa00; font-size: 22px;
+    letter-spacing: 4px; text-shadow: 0 0 15px #ff6600;
+    opacity: 0; font-weight: bold; text-transform: uppercase;
+  }
+  #glitchFlash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 15;
+    background: transparent; mix-blend-mode: screen;
+  }
+  #dmgFlash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 14;
+    background: rgba(200,0,0,0);
+  }
+  #hitFlash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 16;
+    background: transparent;
+  }
+</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="hud">HP: 100 // KILLS: 0 // WAVE: 1</div>
+<div id="killMsg"></div>
+<div id="waveMsg"></div>
+<div id="glitchFlash"></div>
+<div id="dmgFlash"></div>
+<div id="hitFlash"></div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="../engine/sprite.js"></script>
+<script src="../engine/gestures.js"></script>
+
+<script>
+var canvas = document.getElementById('renderCanvas');
+var engine = new BABYLON.Engine(canvas, false, { preserveDrawingBuffer: true, stencil: true, antialias: false });
+engine.setHardwareScalingLevel(3);
+
+var scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.08, 0.05, 0.02, 1);
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.012;
+scene.fogColor = new BABYLON.Color3(0.12, 0.08, 0.04);
+scene.ambientColor = new BABYLON.Color3(0.15, 0.1, 0.06);
+
+// ── Map bounds (filled after load) ───────────────────────
+var mapReady = false;
+var mapMin = new BABYLON.Vector3(0, 0, 0);
+var mapMax = new BABYLON.Vector3(0, 0, 0);
+var mapCenter = new BABYLON.Vector3(0, 0, 0);
+var mapGroundY = 0;
+var mapMeshes = [];
+var playerGroundY = 0;
+var arenaAnchor = { x: 0, y: 0, z: 0, score: 0 };
+
+// ── Load Dust2 map ───────────────────────────────────────
+BABYLON.SceneLoader.ImportMesh('', '../assets/models/', 'dust2_fixed.glb', scene, function(meshes) {
+  console.log('Dust2 loaded, meshes:', meshes.length);
+  var root = meshes[0];
+
+  // Compute raw bounds before scaling
+  var min = new BABYLON.Vector3(Infinity, Infinity, Infinity);
+  var max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
+  meshes.forEach(function(mesh) {
+    if (mesh.getBoundingInfo && mesh.getTotalVertices && mesh.getTotalVertices() > 0) {
+      var bi = mesh.getBoundingInfo();
+      min = BABYLON.Vector3.Minimize(min, bi.boundingBox.minimumWorld);
+      max = BABYLON.Vector3.Maximize(max, bi.boundingBox.maximumWorld);
+    }
+  });
+  var size = max.subtract(min);
+  var maxDim = Math.max(size.x, size.y, size.z);
+  var targetSize = 80;
+  var mapScale = maxDim > 0 ? targetSize / maxDim : 1;
+  console.log('Map raw size:', size.toString(), 'scale:', mapScale);
+
+  root.scaling = new BABYLON.Vector3(mapScale, mapScale, -mapScale);
+
+  // Force recompute bounding info after transform
+  root.computeWorldMatrix(true);
+  meshes.forEach(function(mesh) {
+    mesh.computeWorldMatrix(true);
+    if (mesh.material) {
+      mesh.material.backFaceCulling = false;
+      mesh.material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;
+      if (mesh.material.albedoTexture) {
+        mesh.material.albedoTexture.hasAlpha = false;
+      }
+    }
+    mesh.isPickable = true;
+    mesh.checkCollisions = false;
+  });
+
+  // Recompute world bounds after scaling/rotation
+  var wMin = new BABYLON.Vector3(Infinity, Infinity, Infinity);
+  var wMax = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
+  meshes.forEach(function(mesh) {
+    if (mesh.getTotalVertices && mesh.getTotalVertices() > 0) {
+      mesh.refreshBoundingInfo();
+      var bi = mesh.getBoundingInfo();
+      wMin = BABYLON.Vector3.Minimize(wMin, bi.boundingBox.minimumWorld);
+      wMax = BABYLON.Vector3.Maximize(wMax, bi.boundingBox.maximumWorld);
+      mapMeshes.push(mesh);
+    }
+  });
+
+  mapMin = wMin;
+  mapMax = wMax;
+  mapCenter.x = (wMin.x + wMax.x) / 2;
+  mapCenter.z = (wMin.z + wMax.z) / 2;
+  mapGroundY = wMin.y;
+
+  // Shift map so ground is at y=0
+  root.position.y = -mapGroundY;
+  root.computeWorldMatrix(true);
+  meshes.forEach(function(mesh) { mesh.computeWorldMatrix(true); });
+  mapMax.y -= mapGroundY;
+  mapMin.y = 0;
+  mapGroundY = 0;
+
+  console.log('Map world bounds:', mapMin.toString(), mapMax.toString(), 'center:', mapCenter.toString());
+
+  // Choose a more open arena anchor and place the player relative to it.
+  var playerSpawn = pickArenaAnchor();
+  if (!playerSpawn) playerSpawn = { x: mapCenter.x, z: mapCenter.z, y: mapGroundY, score: 0 };
+  arenaAnchor = playerSpawn;
+  player.spr.position.x = arenaAnchor.x;
+  player.spr.position.z = arenaAnchor.z;
+  playerGroundY = arenaAnchor.y;
+  player.spr.position.y = playerGroundY + PLAYER_Y_OFFSET;
+
+  // Reframe the camera around the chosen arena area instead of the raw model center.
+  camera.alpha = -Math.PI / 2 - 0.42;
+  camera.beta = Math.PI / 3.4;
+  camera.radius = cameraPreferredRadius;
+  camera.target.x = arenaAnchor.x;
+  camera.target.y = arenaAnchor.y + CAMERA_TARGET_Y_OFFSET;
+  camera.target.z = arenaAnchor.z;
+
+  mapReady = true;
+
+  // Spawn first wave now that we know bounds
+  spawnWave();
+}, null, function(scene, msg, ex) {
+  console.error('Dust2 load FAILED:', msg, ex);
+});
+
+function clampMapXZ(x, z, margin) {
+  var edge = margin == null ? 1.5 : margin;
+  return {
+    x: Math.max(mapMin.x + edge, Math.min(mapMax.x - edge, x)),
+    z: Math.max(mapMin.z + edge, Math.min(mapMax.z - edge, z))
+  };
+}
+
+function mapRelativePosition(xRatio, zRatio) {
+  return {
+    x: mapMin.x + (mapMax.x - mapMin.x) * xRatio,
+    z: mapMin.z + (mapMax.z - mapMin.z) * zRatio
+  };
+}
+
+function getMapHits(ray) {
+  if (!mapMeshes.length) return [];
+  var hits = ray.intersectsMeshes(mapMeshes, false) || [];
+  var out = [];
+  for (var i = 0; i < hits.length; i++) {
+    var info = hits[i];
+    if (!info || !info.hit || !info.pickedPoint) continue;
+    var normal = info.getNormal ? info.getNormal(true, true) : null;
+    out.push({
+      info: info,
+      point: info.pickedPoint,
+      y: info.pickedPoint.y,
+      distance: info.distance,
+      normalY: normal ? normal.y : 1
+    });
+  }
+  return out;
+}
+
+// Choose the walkable surface under X/Z, preferring the one closest to the current elevation.
+function pickGroundPoint(x, z, referenceY, maxStepUp, maxStepDown) {
+  if (!mapMeshes.length) return null;
+  var hasRef = typeof referenceY === 'number' && isFinite(referenceY);
+  var stepUp = maxStepUp == null ? 2.0 : maxStepUp;
+  var stepDown = maxStepDown == null ? 6.0 : maxStepDown;
+  var originY = hasRef ? referenceY + stepUp + 0.25 : mapMax.y + 2.0;
+  var rayLen = hasRef ? stepUp + stepDown + 0.5 : Math.max(10, (mapMax.y - mapMin.y) + 6);
+  var ray = new BABYLON.Ray(new BABYLON.Vector3(x, originY, z), new BABYLON.Vector3(0, -1, 0), rayLen);
+  var hits = getMapHits(ray);
+  if (!hits.length) return null;
+
+  var walkable = hits.filter(function(hit) { return hit.normalY > 0.45; });
+  var candidates = walkable.length ? walkable : hits;
+
+  if (hasRef) {
+    var minY = referenceY - stepDown;
+    var maxY = referenceY + stepUp;
+    candidates = candidates.filter(function(hit) {
+      return hit.y >= minY && hit.y <= maxY;
+    });
+    if (!candidates.length) return null;
+    candidates.sort(function(a, b) {
+      var diff = Math.abs(a.y - referenceY) - Math.abs(b.y - referenceY);
+      if (Math.abs(diff) > 0.001) return diff;
+      return b.y - a.y;
+    });
+  } else {
+    candidates.sort(function(a, b) { return b.y - a.y; });
+  }
+
+  return candidates[0].point.clone();
+}
+
+function getGroundY(x, z, referenceY, maxStepUp, maxStepDown) {
+  var point = pickGroundPoint(x, z, referenceY, maxStepUp, maxStepDown);
+  return point ? point.y : null;
+}
+
+function isWalkablePoint(x, z, referenceY, probeRadius) {
+  var gy = getGroundY(x, z, referenceY, 3.5, 8.0);
+  if (gy === null) return null;
+  var probe = probeRadius == null ? 0.75 : probeRadius;
+  var offsets = [[probe, 0], [-probe, 0], [0, probe], [0, -probe]];
+  for (var i = 0; i < offsets.length; i++) {
+    var sy = getGroundY(x + offsets[i][0], z + offsets[i][1], gy, 1.8, 2.8);
+    if (sy === null || Math.abs(sy - gy) > 1.35) return null;
+  }
+  return gy;
+}
+
+function findWalkablePointNear(centerX, centerZ, referenceY, minRadius, maxRadius, attempts, margin) {
+  if (!mapMeshes.length) return null;
+  var minR = minRadius == null ? 0 : minRadius;
+  var maxR = maxRadius == null ? 18 : maxRadius;
+  var tries = attempts == null ? 64 : attempts;
+  var edge = margin == null ? 1.8 : margin;
+
+  var clampedCenter = clampMapXZ(centerX, centerZ, edge);
+  var centerY = isWalkablePoint(clampedCenter.x, clampedCenter.z, referenceY, 0.7);
+  if (centerY !== null) {
+    return { x: clampedCenter.x, z: clampedCenter.z, y: centerY };
+  }
+
+  for (var i = 0; i < tries; i++) {
+    var ratio = tries <= 1 ? 0 : i / (tries - 1);
+    var radius = minR + (maxR - minR) * Math.sqrt(ratio);
+    var angle = (Math.PI * 2 * i / 12) + (i % 2 ? 0.35 : 0);
+    var candidate = clampMapXZ(
+      centerX + Math.cos(angle) * radius,
+      centerZ + Math.sin(angle) * radius,
+      edge
+    );
+    var groundY = isWalkablePoint(candidate.x, candidate.z, referenceY, 0.7);
+    if (groundY !== null) {
+      return { x: candidate.x, z: candidate.z, y: groundY };
+    }
+  }
+
+  for (var j = 0; j < 24; j++) {
+    var randomRadius = minR + Math.random() * (maxR - minR);
+    var randomAngle = Math.random() * Math.PI * 2;
+    var fallback = clampMapXZ(
+      centerX + Math.cos(randomAngle) * randomRadius,
+      centerZ + Math.sin(randomAngle) * randomRadius,
+      edge
+    );
+    var fallbackY = isWalkablePoint(fallback.x, fallback.z, referenceY, 0.7);
+    if (fallbackY !== null) {
+      return { x: fallback.x, z: fallback.z, y: fallbackY };
+    }
+  }
+
+  return null;
+}
+
+function scoreWalkableArea(point) {
+  if (!point) return -Infinity;
+  var score = 0;
+  var radii = [2.0, 4.0, 6.5];
+  for (var r = 0; r < radii.length; r++) {
+    var radius = radii[r];
+    var ringHits = 0;
+    for (var i = 0; i < 8; i++) {
+      var angle = (Math.PI * 2 * i) / 8;
+      var probeX = point.x + Math.cos(angle) * radius;
+      var probeZ = point.z + Math.sin(angle) * radius;
+      var probe = findWalkablePointNear(probeX, probeZ, point.y, 0, 1.8, 10, 2.0);
+      if (probe && Math.abs(probe.y - point.y) < 1.25) {
+        ringHits++;
+      }
+    }
+    score += ringHits * (1 + radius * 0.2);
+  }
+
+  var edgeDist = Math.min(
+    point.x - mapMin.x,
+    mapMax.x - point.x,
+    point.z - mapMin.z,
+    mapMax.z - point.z
+  );
+  score += Math.max(0, Math.min(edgeDist, 14)) * 0.35;
+  return score;
+}
+
+function pickArenaAnchor() {
+  var candidates = [
+    [0.50, 0.50],
+    [0.42, 0.50],
+    [0.58, 0.50],
+    [0.50, 0.40],
+    [0.50, 0.60],
+    [0.35, 0.35],
+    [0.65, 0.35],
+    [0.35, 0.65],
+    [0.65, 0.65],
+    [0.28, 0.50],
+    [0.72, 0.50]
+  ];
+  var best = null;
+
+  for (var i = 0; i < candidates.length; i++) {
+    var seed = mapRelativePosition(candidates[i][0], candidates[i][1]);
+    var point = findWalkablePointNear(seed.x, seed.z, null, 0, 14, 48, 2.2);
+    if (!point) continue;
+    var centerBias = 1 - (Math.abs(candidates[i][0] - 0.5) + Math.abs(candidates[i][1] - 0.5));
+    point.score = scoreWalkableArea(point) + centerBias * 3;
+    if (!best || point.score > best.score) best = point;
+  }
+
+  if (best) return best;
+
+  var fallback = findWalkablePointNear(mapCenter.x, mapCenter.z, null, 0, 26, 96, 2.2);
+  if (fallback) fallback.score = scoreWalkableArea(fallback);
+  return fallback;
+}
+
+function tryMoveOnMap(curX, curZ, stepX, stepZ, groundY, bodyHeight, margin) {
+  var posX = curX;
+  var posZ = curZ;
+  var refY = typeof groundY === 'number' && isFinite(groundY) ? groundY : mapGroundY;
+
+  if (canMoveTo(posX, posZ, posX + stepX, posZ, refY, bodyHeight)) {
+    posX += stepX;
+    var nextGX = getGroundY(posX, posZ, refY, 1.8, 4.5);
+    if (nextGX !== null) refY = nextGX;
+  }
+
+  if (canMoveTo(posX, posZ, posX, posZ + stepZ, refY, bodyHeight)) {
+    posZ += stepZ;
+    var nextGZ = getGroundY(posX, posZ, refY, 1.8, 4.5);
+    if (nextGZ !== null) refY = nextGZ;
+  }
+
+  var clamped = clampMapXZ(posX, posZ, margin == null ? 1.0 : margin);
+  posX = clamped.x;
+  posZ = clamped.z;
+  var clampedGroundY = getGroundY(posX, posZ, refY, 2.0, 5.0);
+  if (clampedGroundY !== null) refY = clampedGroundY;
+
+  return { x: posX, z: posZ, groundY: refY };
+}
+
+// Horizontal raycast to check wall collision at the entity's current elevation.
+function canMoveTo(fromX, fromZ, toX, toZ, referenceY, bodyHeight) {
+  var dx = toX - fromX;
+  var dz = toZ - fromZ;
+  var dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist < 0.001) return true;
+
+  var refY = typeof referenceY === 'number' && isFinite(referenceY) ? referenceY : mapGroundY;
+  var targetGroundY = getGroundY(toX, toZ, refY, 1.8, 4.5);
+  if (targetGroundY === null) return false;
+  if (Math.abs(targetGroundY - refY) > 2.2) return false;
+
+  var dir = new BABYLON.Vector3(dx / dist, 0, dz / dist);
+  var rayY = Math.min(refY, targetGroundY) + Math.max(0.7, (bodyHeight || 1.8) * 0.45);
+  var ray = new BABYLON.Ray(new BABYLON.Vector3(fromX, rayY, fromZ), dir, dist + 0.3);
+  var hits = getMapHits(ray);
+  for (var i = 0; i < hits.length; i++) {
+    var hit = hits[i];
+    if (hit.distance > dist + 0.1) continue;
+    if (hit.normalY > 0.45 && hit.y <= rayY - 0.2) continue;
+    return false;
+  }
+  return true;
+}
+
+function getArcCameraOffset(alpha, beta, radius) {
+  var sinBeta = Math.sin(beta);
+  return new BABYLON.Vector3(
+    Math.cos(alpha) * sinBeta * radius,
+    Math.cos(beta) * radius,
+    Math.sin(alpha) * sinBeta * radius
+  );
+}
+
+function getOccludedCameraRadius(target, preferredRadius) {
+  if (!mapReady || !mapMeshes.length) return preferredRadius;
+
+  var desiredPos = target.add(getArcCameraOffset(camera.alpha, camera.beta, preferredRadius));
+  var toCamera = desiredPos.subtract(target);
+  var desiredDist = toCamera.length();
+  if (desiredDist < 0.001) return preferredRadius;
+
+  var dir = toCamera.scale(1 / desiredDist);
+  var ray = new BABYLON.Ray(target, dir, desiredDist);
+  var hits = getMapHits(ray);
+  var radius = preferredRadius;
+
+  for (var i = 0; i < hits.length; i++) {
+    var hit = hits[i];
+    if (hit.distance < 0.35 || hit.distance > desiredDist) continue;
+    if (hit.normalY > 0.55 && hit.y < target.y - 0.18) continue;
+    radius = Math.min(radius, Math.max(camera.lowerRadiusLimit, hit.distance - CAMERA_OCCLUSION_MARGIN));
+  }
+
+  return Math.max(camera.lowerRadiusLimit, Math.min(preferredRadius, radius));
+}
+
+// ── Player ────────────────────────────────────────────────
+var player = PSXSprite(scene, {
+  name: 'player', texture: '../assets/sprites/eretic.png',
+  cellW: 83, cellH: 91, cols: 9, rows: 8,
+  width: 1.8, height: 2.1, pos: [0, 1.05, 0],
+  anims: { walk: [0, 3], attack: [4, 6], pain: [7, 7], death: [8, 8] }
+});
+player.play('walk', 8);
+var playerFacing = 0, playerHP = 100, kills = 0;
+var isAttacking = false, attackTimer = 0;
+var PLAYER_SPEED = 3.5, ATTACK_RANGE = 2.8, ATTACK_DURATION = 350;
+var PLAYER_Y_OFFSET = 1.05;
+var cameraPreferredRadius = 11.8;
+var CAMERA_OCCLUSION_MARGIN = 0.75;
+var CAMERA_OCCLUSION_LERP = 10.0;
+var CAMERA_TARGET_Y_OFFSET = 1.2;
+
+// ── Torch light — desert orange ──────────────────────────
+var playerLight = new BABYLON.PointLight('pLight', new BABYLON.Vector3(0, 2.5, 0), scene);
+playerLight.diffuse = new BABYLON.Color3(1.0, 0.5, 0.15);
+playerLight.specular = new BABYLON.Color3(0.8, 0.3, 0.1);
+playerLight.intensity = 3.0;
+playerLight.range = 14;
+
+// ── Camera ────────────────────────────────────────────────
+var camera = new BABYLON.ArcRotateCamera('cam', -Math.PI / 2, Math.PI / 3.2, 10, new BABYLON.Vector3(0, 1, 0), scene);
+camera.lowerRadiusLimit = 4.8;
+camera.upperRadiusLimit = 18;
+camera.lowerBetaLimit = 0.35;
+camera.upperBetaLimit = Math.PI / 2.1;
+camera.minZ = 0.1;
+camera.maxZ = 120;
+camera.wheelPrecision = 30;
+
+// ── Lights — desert sun ──────────────────────────────────
+var sun = new BABYLON.DirectionalLight('sun', new BABYLON.Vector3(-1, -2, 1), scene);
+sun.diffuse = new BABYLON.Color3(1.0, 0.85, 0.5);
+sun.intensity = 0.6;
+
+var ambient = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
+ambient.intensity = 0.25;
+ambient.groundColor = new BABYLON.Color3(0.1, 0.06, 0.03);
+ambient.diffuse = new BABYLON.Color3(0.35, 0.25, 0.15);
+
+// ── Enemy types ───────────────────────────────────────────
+var ENEMY_TYPES = {
+  eretic: {
+    texture: '../assets/sprites/eretic.png',
+    cellW: 83, cellH: 91, cols: 9, rows: 8,
+    width: 1.5, height: 1.8, yPos: 1.0,
+    anims: { walk: [0, 3], attack: [4, 6], pain: [7, 7], death: [8, 8] },
+    hp: 3, speed: 2.2, atkDist: 2.2, atkCD: 1000, atkDmg: 10,
+    walkFps: 8, atkFps: 10
+  },
+  dog: {
+    texture: '../assets/sprites/young_dog_grid.png',
+    cellW: 120, cellH: 96, cols: 8, rows: 8,
+    width: 1.8, height: 1.4, yPos: 0.7,
+    anims: { walk: [0, 3], attack: [4, 5], pain: [6, 6], death: [7, 7] },
+    hp: 2, speed: 3.5, atkDist: 1.8, atkCD: 700, atkDmg: 8,
+    walkFps: 10, atkFps: 14
+  },
+  andrey: {
+    texture: '../assets/sprites/andrey_enemy.png',
+    cellW: 778, cellH: 576, cols: 8, rows: 1,
+    width: 2.8, height: 2.2, yPos: 1.25,
+    anims: { walk: [0, 1], attack: [6, 7], pain: [2, 5], death: [2, 5] },
+    hp: 5, speed: 2.8, atkDist: 2.4, atkCD: 900, atkDmg: 12,
+    walkFps: 3, atkFps: 8, painFps: 10, deathFps: 7
+  }
+};
+
+// ── Wave system — escalating chaos ───────────────────────
+var enemies = [];
+var enemyUID = 0;
+var waveNum = 1, waveTimer = 0, WAVE_INTERVAL = 5000;
+var MAX_ALIVE = 8;
+var killMsgEl = document.getElementById('killMsg');
+var waveMsgEl = document.getElementById('waveMsg');
+var killMsgTimer = 0, waveMsgTimer = 0;
+var comboCount = 0, comboTimer = 0;
+var andreyIntroduced = false;
+var hudSignalTimer = 1.6;
+var hudOpacity = 1.0;
+
+// Kill messages
+var KILL_MSGS = [
+  'OBLITERATED', 'REKT', 'DESTROYED', 'ANNIHILATED', 'CRUSHED',
+  'DEMOLISHED', 'WASTED', 'DELETED', 'EVAPORATED', 'SHATTERED',
+  'GG EZ', 'NO SCOPE', 'RUSH B', 'CYKA BLYAT', 'HEADSHOT',
+  'ACE', 'CLUTCH', 'PLANT B', 'CT SPAWN RIP', 'LONG A CLEARED'
+];
+
+var COMBO_MSGS = [
+  '', 'DOUBLE KILL', 'TRIPLE KILL', 'ULTRA KILL', 'RAMPAGE',
+  'GODLIKE', 'BEYOND GODLIKE', 'UNSTOPPABLE'
+];
+
+function showKillMsg() {
+  var msg = KILL_MSGS[Math.floor(Math.random() * KILL_MSGS.length)];
+  if (comboCount >= 2) {
+    var ci = Math.min(comboCount, COMBO_MSGS.length - 1);
+    msg = COMBO_MSGS[ci] + '!!';
+  }
+  killMsgEl.textContent = msg;
+  killMsgEl.style.opacity = '1';
+  killMsgEl.style.color = comboCount >= 3 ? '#ffff00' : comboCount >= 2 ? '#ff6600' : '#ff0000';
+  killMsgEl.style.fontSize = Math.min(28 + comboCount * 6, 60) + 'px';
+  killMsgTimer = 800;
+}
+
+function showWaveMsg() {
+  waveMsgEl.textContent = 'WAVE ' + waveNum + (waveNum >= 5 ? ' — HELL MODE' : waveNum >= 3 ? ' — INSANE' : '');
+  waveMsgEl.style.opacity = '1';
+  waveMsgTimer = 2000;
+}
+
+function rndSpawnPos() {
+  // Try to find a stable patch on the map surface near the player.
+  for (var attempt = 0; attempt < 18; attempt++) {
+    var angle = Math.random() * Math.PI * 2;
+    var dist = 14 + Math.random() * 18;
+    var x = player.spr.position.x + Math.cos(angle) * dist;
+    var z = player.spr.position.z + Math.sin(angle) * dist;
+    var clamped = clampMapXZ(x, z, 2.0);
+    var point = findWalkablePointNear(clamped.x, clamped.z, playerGroundY, 0, 4.5, 24, 2.0);
+    if (point) return [point.x, point.z, point.y];
+  }
+  // Fallback: stay around the chosen arena anchor instead of the raw model center.
+  var fallback = findWalkablePointNear(arenaAnchor.x, arenaAnchor.z, playerGroundY, 8, 24, 72, 2.0);
+  if (fallback) return [fallback.x, fallback.z, fallback.y];
+  return [arenaAnchor.x, arenaAnchor.z, arenaAnchor.y];
+}
+
+function pickEnemyType() {
+  var roll = Math.random();
+  if (roll < 0.42) return 'eretic';
+  if (roll < 0.82) return 'dog';
+  return 'andrey';
+}
+
+function spawnEnemy(x, z, groundY, forcedType) {
+  var typeName = forcedType || pickEnemyType();
+  var cfg = ENEMY_TYPES[typeName];
+  var hpBonus = Math.floor(waveNum / 3);
+  var spdBonus = Math.min(waveNum * 0.1, 1.5);
+  var baseGroundY = groundY == null ? mapGroundY : groundY;
+  var yPos = baseGroundY + cfg.yPos;
+  var e = PSXSprite(scene, {
+    name: 'enemy_' + enemyUID++,
+    texture: cfg.texture,
+    cellW: cfg.cellW, cellH: cfg.cellH, cols: cfg.cols, rows: cfg.rows,
+    width: cfg.width, height: cfg.height,
+    pos: [x, yPos, z],
+    anims: cfg.anims
+  });
+  e.play('walk', cfg.walkFps);
+  enemies.push({
+    psx: e, cfg: cfg,
+    hp: cfg.hp + hpBonus, dead: false,
+    facingAngle: 0, state: 'walk',
+    painTimer: 0, fallTimer: -1, atkCD: 0, removeTimer: 0,
+    speed: cfg.speed + spdBonus,
+    groundY: baseGroundY
+  });
+}
+
+function spawnWave() {
+  if (!mapReady) return;
+  var alive = 0;
+  enemies.forEach(function(e) { if (!e.dead) alive++; });
+  if (alive >= MAX_ALIVE) return;
+  var count = 2 + Math.min(waveNum, 5);
+  count = Math.min(count, MAX_ALIVE - alive);
+  var mustSpawnAndrey = !andreyIntroduced && count > 0;
+  for (var i = 0; i < count; i++) {
+    var pos = rndSpawnPos();
+    var forcedType = null;
+    if (mustSpawnAndrey) {
+      forcedType = 'andrey';
+      mustSpawnAndrey = false;
+      andreyIntroduced = true;
+    }
+    spawnEnemy(pos[0], pos[1], pos[2], forcedType);
+  }
+  showWaveMsg();
+  waveNum++;
+  MAX_ALIVE = Math.min(8 + Math.floor(waveNum / 2), 16);
+}
+
+// Initial wave deferred — spawned after map loads
+
+// ── Input ─────────────────────────────────────────────────
+var keys = {};
+window.addEventListener('keydown', function(e) { keys[e.code] = true; });
+window.addEventListener('keyup', function(e) { keys[e.code] = false; });
+window.addEventListener('blur', function() { keys = {}; });
+
+var gestureInput = PSXGestures(canvas, {
+  moveRadius: 86,
+  onTap: function() {
+    hudSignalTimer = Math.max(hudSignalTimer, 1.2);
+    startAttack();
+  }
+});
+
+function startAttack() {
+  if (isAttacking) return;
+  isAttacking = true;
+  attackTimer = 0;
+  hudSignalTimer = Math.max(hudSignalTimer, 1.3);
+  player.play('attack', 14);
+
+  // Face nearest alive enemy
+  var nearest = null, nearDist = Infinity;
+  enemies.forEach(function(e) {
+    if (e.dead) return;
+    var dx = e.psx.spr.position.x - player.spr.position.x;
+    var dz = e.psx.spr.position.z - player.spr.position.z;
+    var d = Math.sqrt(dx * dx + dz * dz);
+    if (d < nearDist) { nearDist = d; nearest = e; }
+  });
+  if (nearest && nearDist < ATTACK_RANGE * 1.5) {
+    playerFacing = Math.atan2(
+      nearest.psx.spr.position.z - player.spr.position.z,
+      nearest.psx.spr.position.x - player.spr.position.x
+    );
+    player.setDir(playerFacing);
+  }
+
+  // Hit enemies in range
+  var didHit = false;
+  enemies.forEach(function(e) {
+    if (e.dead) return;
+    var dx = e.psx.spr.position.x - player.spr.position.x;
+    var dz = e.psx.spr.position.z - player.spr.position.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < ATTACK_RANGE) {
+      e.hp--;
+      didHit = true;
+      // Knockback
+      if (dist > 0.1) {
+        var knock = tryMoveOnMap(
+          e.psx.spr.position.x,
+          e.psx.spr.position.z,
+          (dx / dist) * 1.2,
+          (dz / dist) * 1.2,
+          e.groundY,
+          e.cfg.height,
+          1.2
+        );
+        e.psx.spr.position.x = knock.x;
+        e.psx.spr.position.z = knock.z;
+        e.groundY = knock.groundY;
+        e.psx.spr.position.y = e.groundY + e.cfg.yPos;
+      }
+      if (e.hp <= 0) {
+        e.dead = true;
+        e.state = 'dead';
+        e.psx.play('death', e.cfg.deathFps || 6);
+        e.fallTimer = 0;
+        kills++;
+        comboCount++;
+        comboTimer = 1500;
+        showKillMsg();
+        triggerGlitch(1.0);
+        // Screen shake!
+        shakeIntensity = 3.0;
+        shakeTimer = 200;
+      } else {
+        e.psx.play('pain', e.cfg.painFps || 8);
+        e.painTimer = 300;
+        e.state = 'pain';
+        triggerGlitch(0.6);
+      }
+    }
+  });
+
+  triggerHitFlash(didHit ? 1.0 : 0.3);
+}
+
+window.addEventListener('keydown', function(e) { if (e.code === 'Space') startAttack(); });
+
+// ── Glitch + hit effects ──────────────────────────────────
+var glitchFlashEl = document.getElementById('glitchFlash');
+var dmgFlashEl = document.getElementById('dmgFlash');
+var hitFlashEl = document.getElementById('hitFlash');
+var glitchTimer = 0, glitchIntensity = 0, GLITCH_DURATION = 300;
+var dmgFade = 0;
+var hitFlashTimer = 0, hitFlashStr = 0;
+var shakeIntensity = 0, shakeTimer = 0;
+
+function triggerGlitch(intensity) {
+  glitchTimer = GLITCH_DURATION;
+  glitchIntensity = Math.max(glitchIntensity, intensity);
+}
+
+function triggerHitFlash(str) {
+  hitFlashTimer = 120;
+  hitFlashStr = str;
+}
+
+// ── Post-processing ───────────────────────────────────────
+var pipeline = new BABYLON.DefaultRenderingPipeline('pipeline', false, scene, [camera]);
+pipeline.bloomEnabled = true;
+pipeline.bloomThreshold = 0.3;
+pipeline.bloomWeight = 0.5;
+pipeline.bloomKernel = 16;
+pipeline.bloomScale = 0.3;
+pipeline.chromaticAberrationEnabled = true;
+pipeline.chromaticAberration.aberrationAmount = 1;
+pipeline.grainEnabled = true;
+pipeline.grain.intensity = 20;
+pipeline.grain.animated = true;
+
+// ── HUD ───────────────────────────────────────────────────
+var hudEl = document.getElementById('hud');
+var scanlinesEl = document.getElementById('scanlines');
+
+// ── Main loop ─────────────────────────────────────────────
+var t = 0;
+var baseCamAlpha = 0, baseCamBeta = 0;
+scene.registerBeforeRender(function() {
+  var dt = engine.getDeltaTime();
+  var dtS = dt * 0.001;
+  t += dtS;
+  hudSignalTimer = Math.max(0, hudSignalTimer - dtS);
+
+  var lookDelta = gestureInput.consumeLookDelta();
+  if (lookDelta.x || lookDelta.y) {
+    camera.alpha -= lookDelta.x * 0.009;
+    camera.beta = Math.max(camera.lowerBetaLimit, Math.min(camera.upperBetaLimit, camera.beta + lookDelta.y * 0.0065));
+    hudSignalTimer = Math.max(hudSignalTimer, 1.1);
+  }
+
+  var zoomDelta = gestureInput.consumeZoomDelta();
+  if (zoomDelta) {
+    cameraPreferredRadius = Math.max(
+      camera.lowerRadiusLimit + 0.4,
+      Math.min(camera.upperRadiusLimit, cameraPreferredRadius + zoomDelta * 0.018)
+    );
+    hudSignalTimer = Math.max(hudSignalTimer, 1.1);
+  }
+
+  // ── Player movement ───────────────────────────────
+  var fwd = new BABYLON.Vector3(
+    player.spr.position.x - camera.position.x, 0,
+    player.spr.position.z - camera.position.z
+  );
+  if (fwd.length() > 0.001) fwd.normalize();
+  var right = BABYLON.Vector3.Cross(BABYLON.Axis.Y, fwd);
+  if (right.length() > 0.001) right.normalize();
+
+  var moveForward = 0;
+  var moveStrafe = 0;
+  var gestureMove = gestureInput.getMoveVector();
+  if (keys['KeyW']) moveForward += 1;
+  if (keys['KeyS']) moveForward -= 1;
+  if (keys['KeyA']) moveStrafe -= 1;
+  if (keys['KeyD']) moveStrafe += 1;
+  if (gestureMove.active) {
+    moveStrafe += gestureMove.x;
+    moveForward -= gestureMove.y;
+    hudSignalTimer = Math.max(hudSignalTimer, 0.9);
+  }
+
+  var moveLen = Math.sqrt(moveForward * moveForward + moveStrafe * moveStrafe);
+  var moveX = 0;
+  var moveZ = 0;
+  if (moveLen > 0.001) {
+    moveForward /= moveLen;
+    moveStrafe /= moveLen;
+    moveX = fwd.x * moveForward + right.x * moveStrafe;
+    moveZ = fwd.z * moveForward + right.z * moveStrafe;
+  }
+
+  if (moveLen > 0.01 && !isAttacking) {
+    var stepX = moveX * PLAYER_SPEED * dtS;
+    var stepZ = moveZ * PLAYER_SPEED * dtS;
+    if (mapReady) {
+      var playerMove = tryMoveOnMap(
+        player.spr.position.x,
+        player.spr.position.z,
+        stepX,
+        stepZ,
+        playerGroundY,
+        player.spr.height,
+        1.0
+      );
+      player.spr.position.x = playerMove.x;
+      player.spr.position.z = playerMove.z;
+      playerGroundY = playerMove.groundY;
+    } else {
+      player.spr.position.x += stepX;
+      player.spr.position.z += stepZ;
+    }
+    playerFacing = Math.atan2(moveZ, moveX);
+    player.setDir(playerFacing);
+    player.play('walk', 8);
+  } else if (!isAttacking) {
+    player.stop();
+  }
+
+  if (mapReady) {
+    var currentPlayerGroundY = getGroundY(player.spr.position.x, player.spr.position.z, playerGroundY, 1.8, 4.5);
+    if (currentPlayerGroundY !== null) playerGroundY = currentPlayerGroundY;
+    player.spr.position.y = playerGroundY + PLAYER_Y_OFFSET;
+  }
+
+  if (isAttacking) {
+    attackTimer += dt;
+    if (attackTimer >= ATTACK_DURATION) {
+      isAttacking = false;
+      player.play('walk', 8);
+    }
+  }
+
+  player.update(dt, camera);
+
+  // ── Camera follow ─────────────────────────────────
+  camera.target.x = player.spr.position.x;
+  camera.target.y = playerGroundY + CAMERA_TARGET_Y_OFFSET;
+  camera.target.z = player.spr.position.z;
+
+  var desiredCameraRadius = getOccludedCameraRadius(
+    new BABYLON.Vector3(camera.target.x, camera.target.y, camera.target.z),
+    cameraPreferredRadius
+  );
+  camera.radius += (desiredCameraRadius - camera.radius) * Math.min(1, dtS * CAMERA_OCCLUSION_LERP);
+
+  // Screen shake
+  if (shakeTimer > 0) {
+    shakeTimer -= dt;
+    var sk = shakeIntensity * (shakeTimer / 200);
+    camera.target.x += (Math.random() - 0.5) * sk;
+    camera.target.z += (Math.random() - 0.5) * sk;
+    camera.target.y += (Math.random() - 0.5) * sk * 0.3;
+  }
+
+  // Player light — desert torch flicker
+  playerLight.position.x = player.spr.position.x;
+  playerLight.position.y = playerGroundY + 2.5;
+  playerLight.position.z = player.spr.position.z;
+  playerLight.intensity = 2.5 + Math.sin(t * 8) * 0.4 + Math.sin(t * 13) * 0.2;
+  playerLight.range = 12 + Math.sin(t * 3) * 2;
+
+  // ── Wave spawner ──────────────────────────────────
+  if (mapReady) {
+    waveTimer += dt;
+    if (waveTimer >= WAVE_INTERVAL) {
+      waveTimer = 0;
+      spawnWave();
+    }
+  }
+
+  // ── Combo timer ───────────────────────────────────
+  if (comboTimer > 0) {
+    comboTimer -= dt;
+    if (comboTimer <= 0) comboCount = 0;
+  }
+
+  // ── Kill message fade ─────────────────────────────
+  if (killMsgTimer > 0) {
+    killMsgTimer -= dt;
+    killMsgEl.style.opacity = Math.max(0, killMsgTimer / 800).toFixed(3);
+    if (killMsgTimer <= 0) killMsgEl.style.opacity = '0';
+  }
+  if (waveMsgTimer > 0) {
+    waveMsgTimer -= dt;
+    waveMsgEl.style.opacity = Math.max(0, waveMsgTimer / 2000).toFixed(3);
+    if (waveMsgTimer <= 0) waveMsgEl.style.opacity = '0';
+  }
+
+  // ── Enemy AI ──────────────────────────────────────
+  for (var ei = enemies.length - 1; ei >= 0; ei--) {
+    var e = enemies[ei];
+    if (e.dead) {
+      if (e.fallTimer >= 0 && e.fallTimer < 1000) {
+        e.fallTimer += dt;
+        var fp = Math.min(1, e.fallTimer / 700);
+        e.psx.spr.position.y = e.groundY + e.cfg.yPos - fp * (e.cfg.yPos * 0.8);
+        e.psx.spr.height = e.cfg.height * (1 - fp * 0.65);
+      }
+      e.removeTimer += dt;
+      if (e.removeTimer > 3000) {
+        e.psx.dispose();
+        enemies.splice(ei, 1);
+        continue;
+      }
+      e.psx.update(dt, camera);
+      continue;
+    }
+
+    var dx = player.spr.position.x - e.psx.spr.position.x;
+    var dz = player.spr.position.z - e.psx.spr.position.z;
+    var dist = Math.sqrt(dx * dx + dz * dz);
+    var targetAngle = Math.atan2(dz, dx);
+
+    var angDiff = targetAngle - e.facingAngle;
+    while (angDiff > Math.PI) angDiff -= 2 * Math.PI;
+    while (angDiff < -Math.PI) angDiff += 2 * Math.PI;
+    e.facingAngle += angDiff * Math.min(1, 4.0 * dtS);
+    e.psx.setDir(e.facingAngle);
+
+    if (e.state === 'pain') {
+      e.painTimer -= dt;
+      if (e.painTimer <= 0) { e.state = 'walk'; e.psx.play('walk', e.cfg.walkFps); }
+      e.psx.update(dt, camera);
+      continue;
+    }
+
+    if (dist > e.cfg.atkDist) {
+      if (e.state !== 'walk') { e.state = 'walk'; e.psx.play('walk', e.cfg.walkFps); }
+      var eStepX = (dx / dist) * e.speed * dtS;
+      var eStepZ = (dz / dist) * e.speed * dtS;
+      var enemyMove = tryMoveOnMap(
+        e.psx.spr.position.x,
+        e.psx.spr.position.z,
+        eStepX,
+        eStepZ,
+        e.groundY,
+        e.cfg.height,
+        1.2
+      );
+      e.psx.spr.position.x = enemyMove.x;
+      e.psx.spr.position.z = enemyMove.z;
+      e.groundY = enemyMove.groundY;
+      e.psx.spr.position.y = e.groundY + e.cfg.yPos;
+    } else {
+      if (e.state !== 'attack') { e.state = 'attack'; e.psx.play('attack', e.cfg.atkFps); }
+      e.atkCD -= dt;
+      if (e.atkCD <= 0) {
+        e.atkCD = e.cfg.atkCD;
+        playerHP = Math.max(0, playerHP - e.cfg.atkDmg);
+        dmgFade = 0.6;
+        hudSignalTimer = Math.max(hudSignalTimer, 1.7);
+        triggerGlitch(0.4);
+        shakeIntensity = 1.5;
+        shakeTimer = 150;
+      }
+    }
+
+    e.psx.update(dt, camera);
+  }
+
+  // ── Glitch effect ─────────────────────────────────
+  if (glitchTimer > 0) {
+    glitchTimer -= dt;
+    var gP = Math.max(0, glitchTimer / GLITCH_DURATION);
+    var gS = gP * glitchIntensity;
+    pipeline.chromaticAberration.aberrationAmount = 1 + gS * 50;
+    pipeline.grain.intensity = 20 + gS * 100;
+    pipeline.bloomWeight = 0.5 + gS * 2.0;
+    var jitter = gS > 0.2 ? (Math.random() - 0.5) * 10 : 0;
+    scanlinesEl.style.transform = 'translateX(' + jitter + 'px) translateY(' + (jitter * 0.5) + 'px)';
+    var fA = gP > 0.5 ? (gP - 0.5) * 2 : 0;
+    glitchFlashEl.style.background = 'rgba(255,100,0,' + (fA * 0.4 * glitchIntensity).toFixed(3) + ')';
+    if (glitchTimer <= 0) {
+      glitchIntensity = 0;
+      pipeline.chromaticAberration.aberrationAmount = 1;
+      pipeline.grain.intensity = 20;
+      pipeline.bloomWeight = 0.5;
+      glitchFlashEl.style.background = 'transparent';
+      scanlinesEl.style.transform = '';
+    }
+  }
+
+  // Hit flash
+  if (hitFlashTimer > 0) {
+    hitFlashTimer -= dt;
+    var hP = Math.max(0, hitFlashTimer / 120);
+    hitFlashEl.style.background = 'rgba(255,200,100,' + (hP * 0.2 * hitFlashStr).toFixed(3) + ')';
+    if (hitFlashTimer <= 0) hitFlashEl.style.background = 'transparent';
+  }
+
+  // Damage flash
+  if (dmgFade > 0) {
+    dmgFade = Math.max(0, dmgFade - 1.5 * dtS);
+    dmgFlashEl.style.background = 'rgba(180,0,0,' + dmgFade.toFixed(3) + ')';
+  }
+
+  // ── HUD ───────────────────────────────────────────
+  hudEl.textContent = 'HP ' + playerHP + ' // KILLS ' + kills + ' // WAVE ' + waveNum + ' // FPS ' + Math.round(engine.getFps());
+  var hudTargetOpacity = (playerHP <= 50 || killMsgTimer > 0 || waveMsgTimer > 0 || dmgFade > 0.05 || hudSignalTimer > 0) ? 1 : 0.18;
+  hudOpacity += (hudTargetOpacity - hudOpacity) * Math.min(1, dtS * 7);
+  hudEl.style.opacity = hudOpacity.toFixed(3);
+
+  // HP color warning
+  if (playerHP <= 25) {
+    hudEl.style.color = '#ff0000';
+    hudEl.style.textShadow = '0 0 10px #ff0000, 0 0 25px #ff0000';
+  } else if (playerHP <= 50) {
+    hudEl.style.color = '#ff4400';
+    hudEl.style.textShadow = '0 0 8px #ff4400';
+  } else {
+    hudEl.style.color = '#ff6600';
+    hudEl.style.textShadow = '0 0 8px #ff4400, 0 0 20px #ff2200';
+  }
+});
+
+engine.runRenderLoop(function() { scene.render(); });
+window.addEventListener('resize', function() { engine.resize(); });
+</script>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  var embedded=p.get('embedded')==='1';
+  var preview=p.get('preview')==='1';
+  if(embedded){
+    var mc=document.getElementById('mode-chip');
+    if(mc)mc.style.display='none';
+  }
+  if(preview){
+    var h=document.getElementById('hud');if(h)h.style.display='none';
+    var hi=document.getElementById('hint');if(hi)hi.style.display='none';
+    var tc=document.getElementById('touch-controls');if(tc)tc.style.display='none';
+  }
+})();
+</script>
+</body>
+</html>

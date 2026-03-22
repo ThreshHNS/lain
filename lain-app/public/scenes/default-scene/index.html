@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Default Scene</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; }
+  canvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  #scanlines {
+    position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    background: repeating-linear-gradient(
+      0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 3px
+    );
+  }
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 11;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.85) 100%);
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+
+<script>
+const canvas = document.getElementById('c');
+const engine = new BABYLON.Engine(canvas, false, { antialias: false, stencil: true });
+engine.setHardwareScalingLevel(2);
+
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.0, 0.0, 0.02, 1);
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.18;
+scene.fogColor = new BABYLON.Color3(0.0, 0.0, 0.04);
+
+// Fixed camera — player POV, penguins fly AT you
+const camera = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(0, 0, 0), scene);
+camera.setTarget(new BABYLON.Vector3(0, 0, 1));
+
+// Dim ambient + eerie point light
+const ambient = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
+ambient.intensity = 0.08;
+ambient.diffuse = new BABYLON.Color3(0.2, 0.1, 0.4);
+ambient.groundColor = new BABYLON.Color3(0.05, 0.0, 0.1);
+
+const glow = new BABYLON.PointLight('glow', new BABYLON.Vector3(0, 0, 2), scene);
+glow.diffuse = new BABYLON.Color3(0.3, 0.05, 0.8);
+glow.intensity = 2.5;
+glow.range = 12;
+
+// Post-processing
+const pipeline = new BABYLON.DefaultRenderingPipeline('pp', false, scene, [camera]);
+pipeline.bloomEnabled = true;
+pipeline.bloomThreshold = 0.3;
+pipeline.bloomWeight = 0.8;
+pipeline.bloomKernel = 32;
+pipeline.bloomScale = 0.5;
+pipeline.grainEnabled = true;
+pipeline.grain.intensity = 25;
+pipeline.grain.animated = true;
+pipeline.chromaticAberrationEnabled = true;
+pipeline.chromaticAberration.aberrationAmount = 3;
+
+// Penguin pool
+const POOL_SIZE = 18;
+const penguins = [];   // { root, speed, wobble, wobbleOffset, scaleBase }
+let templateMeshes = null;
+let ready = false;
+
+BABYLON.SceneLoader.ImportMesh(
+  '',
+  '../assets/models/',
+  'ping.glb',
+  scene,
+  function(meshes) {
+    // Hide the original, use as template
+    meshes.forEach(m => m.setEnabled(false));
+    templateMeshes = meshes;
+    ready = true;
+    spawnAll();
+  }
+);
+
+function spawnPenguin(forceZ) {
+  if (!templateMeshes) return null;
+
+  // Clone all meshes into a root transform
+  const root = new BABYLON.TransformNode('penguin_root', scene);
+
+  templateMeshes.forEach(m => {
+    if (m.getTotalVertices && m.getTotalVertices() > 0) {
+      const clone = m.clone('penguin_mesh', root);
+      clone.setEnabled(true);
+      clone.parent = root;
+      if (clone.material) {
+        clone.material = clone.material.clone('pmat');
+        clone.material.backFaceCulling = false;
+        clone.material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;
+        if (clone.material.albedoTexture) clone.material.albedoTexture.hasAlpha = false;
+      }
+    }
+  });
+
+  // Random spawn spread — wide tunnel toward camera
+  const spread = 5;
+  root.position.x = (Math.random() - 0.5) * spread;
+  root.position.y = (Math.random() - 0.5) * spread * 0.6;
+  root.position.z = forceZ !== undefined ? forceZ : 8 + Math.random() * 14;
+
+  // Face the camera (flip 180 on Y)
+  root.rotation.y = Math.PI;
+  // Slight random tilt
+  root.rotation.z = (Math.random() - 0.5) * 0.3;
+
+  const s = 0.4 + Math.random() * 0.6;
+  root.scaling = new BABYLON.Vector3(s, s, s);
+
+  return {
+    root,
+    speed: 2.5 + Math.random() * 3.5,
+    wobble: 0.4 + Math.random() * 0.6,
+    wobbleOffset: Math.random() * Math.PI * 2,
+    scaleBase: s,
+  };
+}
+
+function spawnAll() {
+  for (let i = 0; i < POOL_SIZE; i++) {
+    // Stagger initial Z so they don't all arrive at once
+    const p = spawnPenguin(2 + i * 1.4);
+    if (p) penguins.push(p);
+  }
+}
+
+function resetPenguin(p) {
+  const spread = 5;
+  p.root.position.x = (Math.random() - 0.5) * spread;
+  p.root.position.y = (Math.random() - 0.5) * spread * 0.6;
+  p.root.position.z = 16 + Math.random() * 6;
+  p.root.rotation.z = (Math.random() - 0.5) * 0.3;
+  p.speed = 2.5 + Math.random() * 3.5;
+}
+
+let t = 0;
+scene.registerBeforeRender(() => {
+  const dt = engine.getDeltaTime() * 0.001;
+  t += dt;
+
+  // Pulse the glow light
+  glow.intensity = 2.0 + Math.sin(t * 1.8) * 0.6;
+  glow.position.x = Math.sin(t * 0.5) * 0.8;
+  glow.position.y = Math.cos(t * 0.7) * 0.4;
+
+  penguins.forEach(p => {
+    p.root.position.z -= p.speed * dt;
+
+    // Slight wobble
+    p.root.position.x += Math.sin(t * p.wobble * 2 + p.wobbleOffset) * 0.008;
+    p.root.position.y += Math.cos(t * p.wobble + p.wobbleOffset) * 0.005;
+
+    // Scale up as they approach (parallax feel)
+    const closeness = Math.max(0, 1 - p.root.position.z / 16);
+    const s = p.scaleBase * (1 + closeness * 1.2);
+    p.root.scaling.setAll(s);
+
+    // Flew past camera — reset to back
+    if (p.root.position.z < -2) {
+      resetPenguin(p);
+    }
+  });
+});
+
+engine.runRenderLoop(() => scene.render());
+window.addEventListener('resize', () => engine.resize());
+</script>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  var embedded=p.get('embedded')==='1';
+  var preview=p.get('preview')==='1';
+  if(embedded){
+    var mc=document.getElementById('mode-chip');
+    if(mc)mc.style.display='none';
+  }
+  if(preview){
+    var h=document.getElementById('hud');if(h)h.style.display='none';
+    var hi=document.getElementById('hint');if(hi)hi.style.display='none';
+    var tc=document.getElementById('touch-controls');if(tc)tc.style.display='none';
+  }
+})();
+</script>
+</body>
+</html>

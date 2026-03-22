@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>meow3</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; overflow: hidden; font-family: monospace; }
+  #renderCanvas { width: 100vw; height: 100vh; display: block; image-rendering: pixelated; }
+  #hud {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+  #scanlines {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.08) 0px,
+      rgba(0,0,0,0.08) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none; z-index: 20;
+  }
+  #vignette {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none; z-index: 21;
+  }
+  #info {
+    position: fixed; bottom: 20px; left: 20px;
+    color: #ff3300; font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; z-index: 30;
+    text-shadow: 0 0 8px #ff3300;
+    pointer-events: none;
+  }
+  #title {
+    position: fixed; top: 20px; left: 50%;
+    transform: translateX(-50%);
+    color: #cccccc; font-size: 11px; letter-spacing: 6px;
+    text-transform: uppercase; z-index: 30;
+    text-shadow: 0 0 12px rgba(255,255,255,0.3);
+    opacity: 0.7;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<div id="title">meow3</div>
+<div id="info" id="fps">FPS: --</div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="../engine/sprite.js"></script>
+<script src="../engine/gestures.js"></script>
+
+<script>
+const canvas = document.getElementById('renderCanvas');
+const engine = new BABYLON.Engine(canvas, false, {
+  preserveDrawingBuffer: true,
+  stencil: true,
+  antialias: false // PSX no AA
+});
+
+// Lower resolution for PSX feel
+engine.setHardwareScalingLevel(3); // render at 1/3 native res
+
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.02, 0.01, 0.04, 1);
+scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+scene.fogDensity = 0.04;
+scene.fogColor = new BABYLON.Color3(0.04, 0.01, 0.08);
+
+// Camera (follow penguin)
+const camera = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(0, 5, -10), scene);
+camera.setTarget(new BABYLON.Vector3(0, 1, 0));
+camera.minZ = 0.1;
+camera.maxZ = 60;
+const camSmooth = 0.06;
+const cameraFocus = new BABYLON.Vector3(0, 2.2, 0);
+let cameraYaw = Math.PI * 1.22;
+let cameraPitch = 0.42;
+let cameraDistance = 11.5;
+
+// Lights
+const ambient = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
+ambient.intensity = 0.15;
+ambient.groundColor = new BABYLON.Color3(0.1, 0.0, 0.15);
+ambient.diffuse = new BABYLON.Color3(0.2, 0.1, 0.3);
+
+const point1 = new BABYLON.PointLight('p1', new BABYLON.Vector3(0, 3, 0), scene);
+point1.diffuse = new BABYLON.Color3(0.4, 0.1, 0.8);
+point1.intensity = 1.5;
+point1.range = 15;
+
+const point2 = new BABYLON.PointLight('p2', new BABYLON.Vector3(-5, 1, 3), scene);
+point2.diffuse = new BABYLON.Color3(0.0, 0.5, 0.8);
+point2.intensity = 0.8;
+point2.range = 10;
+
+const point3 = new BABYLON.PointLight('p3', new BABYLON.Vector3(5, 1, 3), scene);
+point3.diffuse = new BABYLON.Color3(0.8, 0.1, 0.1);
+point3.intensity = 0.6;
+point3.range = 10;
+
+// PSX material helper
+function psxMat(name, r, g, b) {
+  const mat = new BABYLON.StandardMaterial(name, scene);
+  mat.diffuseColor = new BABYLON.Color3(r, g, b);
+  mat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+  mat.specularPower = 4;
+  return mat;
+}
+
+// Floor
+const floor = BABYLON.MeshBuilder.CreateGround('floor', {width: 40, height: 40, subdivisions: 2}, scene);
+floor.material = psxMat('floorMat', 0.05, 0.02, 0.08);
+
+// Floor grid lines
+const gridMat = new BABYLON.StandardMaterial('grid', scene);
+gridMat.wireframe = true;
+gridMat.emissiveColor = new BABYLON.Color3(0.15, 0.05, 0.25);
+const floorGrid = BABYLON.MeshBuilder.CreateGround('floorGrid', {width: 40, height: 40, subdivisions: 20}, scene);
+floorGrid.material = gridMat;
+floorGrid.position.y = 0.01;
+
+// GLB model loading
+BABYLON.SceneLoader.ImportMesh(
+  '',
+  '../assets/models/',
+  'ping.glb',
+  scene,
+  function(meshes) {
+    meshes.forEach(mesh => {
+      if (!mesh.material) return;
+      mesh.material.backFaceCulling = false;
+      mesh.material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;
+      if (mesh.material.albedoTexture) {
+        mesh.material.albedoTexture.hasAlpha = false;
+      }
+    });
+  }
+);
+
+// Flying penguin
+let penguinRoot = null;
+BABYLON.SceneLoader.ImportMesh(
+  '',
+  '../assets/models/',
+  'ping.glb',
+  scene,
+  function(meshes) {
+    penguinRoot = new BABYLON.TransformNode('penguinRoot', scene);
+    meshes.forEach(mesh => {
+      if (!mesh.parent || mesh.parent.name === '__root__') {
+        mesh.parent = penguinRoot;
+      }
+      if (mesh.material) {
+        mesh.material.backFaceCulling = false;
+        mesh.material.transparencyMode = BABYLON.Material.MATERIAL_OPAQUE;
+        if (mesh.material.albedoTexture) {
+          mesh.material.albedoTexture.hasAlpha = false;
+        }
+      }
+    });
+    penguinRoot.scaling = new BABYLON.Vector3(0.8, 0.8, 0.8);
+    penguinRoot._flyAngle = 0;
+  }
+);
+
+// Central pillar / obelisk
+const obelisk = BABYLON.MeshBuilder.CreateBox('obelisk', {width: 0.8, height: 6, depth: 0.8}, scene);
+obelisk.position = new BABYLON.Vector3(0, 3, 0);
+const obeliskMat = psxMat('obeliskMat', 0.08, 0.04, 0.12);
+obelisk.material = obeliskMat;
+
+// Floating crystals around obelisk
+const crystalPositions = [
+  [-2, 0.5, 0], [2, 1, 0], [0, 0.8, -2], [0, 1.2, 2],
+  [-1.5, 2, 1.5], [1.5, 1.5, -1.5]
+];
+crystalPositions.forEach((pos, i) => {
+  const crystal = BABYLON.MeshBuilder.CreatePolyhedron(`crystal${i}`, {
+    type: 3, size: 0.3 + Math.random() * 0.3
+  }, scene);
+  crystal.position = new BABYLON.Vector3(...pos);
+  crystal.rotation = new BABYLON.Vector3(Math.random()*6, Math.random()*6, Math.random()*6);
+  const colors = [[0.3,0.1,0.8],[0.0,0.4,0.9],[0.8,0.1,0.5],[0.1,0.7,0.5]];
+  const c = colors[i % colors.length];
+  const mat = new BABYLON.StandardMaterial(`crystalMat${i}`, scene);
+  mat.emissiveColor = new BABYLON.Color3(c[0]*0.5, c[1]*0.5, c[2]*0.5);
+  mat.diffuseColor = new BABYLON.Color3(c[0], c[1], c[2]);
+  mat.alpha = 0.85;
+  crystal.material = mat;
+  crystal._orbitSpeed = 0.3 + Math.random() * 0.5;
+  crystal._orbitRadius = 1.5 + Math.random() * 1.5;
+  crystal._orbitAngle = (i / crystalPositions.length) * Math.PI * 2;
+  crystal._orbitHeight = pos[1];
+});
+
+// Ruins / broken walls
+function createWall(x, z, rx, ry, w, h) {
+  const wall = BABYLON.MeshBuilder.CreateBox('wall', {width: w, height: h, depth: 0.2}, scene);
+  wall.position = new BABYLON.Vector3(x, h/2, z);
+  wall.rotation.y = ry;
+  wall.material = psxMat('wallMat', 0.06, 0.03, 0.09);
+  return wall;
+}
+createWall(-6, -3, 0, 0.2, 3, 2.5);
+createWall(6, -3, 0, -0.3, 2, 3.5);
+createWall(-7, 3, 0, 1.8, 4, 1.8);
+createWall(5, 5, 0, 0.5, 3, 2.2);
+createWall(0, -6, 0, 0, 5, 1.5);
+
+// Floating debris
+for (let i = 0; i < 20; i++) {
+  const debris = BABYLON.MeshBuilder.CreateBox(`d${i}`, {
+    width: 0.1 + Math.random()*0.4,
+    height: 0.1 + Math.random()*0.3,
+    depth: 0.1 + Math.random()*0.4
+  }, scene);
+  debris.position = new BABYLON.Vector3(
+    (Math.random()-0.5)*16,
+    0.5 + Math.random()*4,
+    (Math.random()-0.5)*16
+  );
+  debris.rotation = new BABYLON.Vector3(Math.random()*6, Math.random()*6, Math.random()*6);
+  debris.material = psxMat(`dm${i}`, 0.07, 0.03, 0.1);
+  debris._floatOffset = Math.random() * Math.PI * 2;
+  debris._floatSpeed = 0.3 + Math.random() * 0.5;
+  debris._baseY = debris.position.y;
+}
+
+// Particle-like emissive spheres (stars/sparks)
+for (let i = 0; i < 30; i++) {
+  const spark = BABYLON.MeshBuilder.CreateSphere(`spark${i}`, {diameter: 0.06}, scene);
+  spark.position = new BABYLON.Vector3(
+    (Math.random()-0.5)*20,
+    0.3 + Math.random()*5,
+    (Math.random()-0.5)*20
+  );
+  const sm = new BABYLON.StandardMaterial(`spm${i}`, scene);
+  const hue = Math.random();
+  sm.emissiveColor = new BABYLON.Color3(
+    hue < 0.33 ? 0.8 : 0.1,
+    hue > 0.33 && hue < 0.66 ? 0.6 : 0.1,
+    hue > 0.66 ? 0.9 : 0.2
+  );
+  spark.material = sm;
+  spark._floatOffset = Math.random() * Math.PI * 2;
+  spark._floatSpeed = 0.5 + Math.random();
+  spark._baseY = spark.position.y;
+}
+
+// Post-processing
+const pipeline = new BABYLON.DefaultRenderingPipeline('pipeline', false, scene, [camera]);
+pipeline.bloomEnabled = true;
+pipeline.bloomThreshold = 0.4;
+pipeline.bloomWeight = 0.6;
+pipeline.bloomKernel = 16;
+pipeline.bloomScale = 0.3;
+pipeline.chromaticAberrationEnabled = true;
+pipeline.chromaticAberration.aberrationAmount = 2;
+pipeline.grainEnabled = true;
+pipeline.grain.intensity = 20;
+pipeline.grain.animated = true;
+
+// Andrey enemy sprite built from photo frames (stand / dodge / attack)
+const andreyEnemySprite = PSXSprite(scene, {
+  name: 'andrey_enemy',
+  texture: '../assets/sprites/andrey_enemy.png',
+  cellW: 778,
+  cellH: 576,
+  cols: 8,
+  rows: 1,
+  width: 6,
+  height: 4.5,
+  pos: [8, 2.4, 8],
+  anims: {
+    stand: [0, 1],
+    dodge: [2, 5],
+    attack: [6, 7]
+  }
+});
+andreyEnemySprite.play('stand', 3);
+
+const ENEMY_STATE = {
+  stand:  { anim: 'stand',  fps: 3,  duration: [2000, 3500], speed: 0.4 },
+  dodge:  { anim: 'dodge',  fps: 10, duration: [900, 1500], speed: 4.2 },
+  attack: { anim: 'attack', fps: 7,  duration: [700, 1100], speed: 2.1 }
+};
+let enemyState = 'stand';
+let enemyStateTimer = 0;
+let enemyHeading = Math.random() * Math.PI * 2;
+let enemyHeadingTimer = 0;
+
+function setEnemyState(next) {
+  const cfg = ENEMY_STATE[next];
+  enemyState = next;
+  enemyStateTimer = cfg.duration[0] + Math.random() * (cfg.duration[1] - cfg.duration[0]);
+  andreyEnemySprite.play(cfg.anim, cfg.fps);
+}
+
+setEnemyState('stand');
+
+// JMYH sprite built from the second batch of photos
+const jmyhSprite = PSXSprite(scene, {
+  name: 'jmyh_enemy',
+  texture: '../assets/sprites/jmyh.png',
+  cellW: 507,
+  cellH: 576,
+  cols: 9,
+  rows: 1,
+  width: 5.2,
+  height: 4.2,
+  pos: [-7, 2.2, -6],
+  anims: {
+    stand: [0, 3],
+    dodge: [4, 6],
+    attack: [7, 8]
+  }
+});
+
+const JMYH_STATE = {
+  stand:  { anim: 'stand',  fps: 2,  duration: [2500, 4000], speed: 0.3 },
+  dodge:  { anim: 'dodge',  fps: 8,  duration: [800, 1400], speed: 3.5 },
+  attack: { anim: 'attack', fps: 6,  duration: [900, 1300], speed: 1.8 }
+};
+let jmyhState = 'stand';
+let jmyhStateTimer = 0;
+let jmyhHeading = Math.random() * Math.PI * 2;
+let jmyhHeadingTimer = 0;
+
+function setJmyhState(next) {
+  const cfg = JMYH_STATE[next];
+  jmyhState = next;
+  jmyhStateTimer = cfg.duration[0] + Math.random() * (cfg.duration[1] - cfg.duration[0]);
+  jmyhSprite.play(cfg.anim, cfg.fps);
+}
+
+setJmyhState('stand');
+
+// Andrey Livan sprite (stand / walk / attack)
+const livanSprite = PSXSprite(scene, {
+  name: 'andrey_livan',
+  texture: '../assets/sprites/andrey_livan_enemy.png',
+  cellW: 528,
+  cellH: 560,
+  cols: 8,
+  rows: 1,
+  width: 5.5,
+  height: 4.4,
+  pos: [-4, 2.2, 6],
+  anims: {
+    stand: [0, 0],
+    dodge: [1, 2],
+    attack: [3, 7]
+  }
+});
+
+const LIVAN_STATE = {
+  stand:  { anim: 'stand',  fps: 1,  duration: [2500, 4000], speed: 0.2 },
+  dodge:  { anim: 'dodge',  fps: 6,  duration: [1200, 1800], speed: 2.8 },
+  attack: { anim: 'attack', fps: 7,  duration: [900, 1300], speed: 2.4 }
+};
+let livanState = 'stand';
+let livanStateTimer = 0;
+let livanHeading = Math.random() * Math.PI * 2;
+let livanHeadingTimer = 0;
+
+function setLivanState(next) {
+  const cfg = LIVAN_STATE[next];
+  livanState = next;
+  livanStateTimer = cfg.duration[0] + Math.random() * (cfg.duration[1] - cfg.duration[0]);
+  livanSprite.play(cfg.anim, cfg.fps);
+}
+
+setLivanState('stand');
+
+// Animation
+let t = 0;
+const infoEl = document.getElementById('info');
+const titleEl = document.getElementById('title');
+const focusLabels = ['PENGUIN', 'ANDREY', 'JMYH', 'LIVAN', 'OBELISK'];
+let focusIndex = 0;
+let overlayTimer = 2.2;
+let overlayOpacity = 1;
+const gestureInput = PSXGestures(canvas, {
+  primaryLook: true,
+  onTap: () => cycleFocus()
+});
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function orbitOffset(yaw, pitch, distance) {
+  const cosPitch = Math.cos(pitch);
+  return new BABYLON.Vector3(
+    Math.sin(yaw) * cosPitch * distance,
+    Math.sin(pitch) * distance,
+    Math.cos(yaw) * cosPitch * distance
+  );
+}
+
+function focusPosition() {
+  if (focusIndex === 1) return new BABYLON.Vector3(andreyEnemySprite.spr.position.x, andreyEnemySprite.spr.position.y, andreyEnemySprite.spr.position.z);
+  if (focusIndex === 2) return new BABYLON.Vector3(jmyhSprite.spr.position.x, jmyhSprite.spr.position.y, jmyhSprite.spr.position.z);
+  if (focusIndex === 3) return new BABYLON.Vector3(livanSprite.spr.position.x, livanSprite.spr.position.y, livanSprite.spr.position.z);
+  if (focusIndex === 4) return new BABYLON.Vector3(obelisk.position.x, obelisk.position.y + 0.7, obelisk.position.z);
+  if (penguinRoot) return new BABYLON.Vector3(penguinRoot.position.x, penguinRoot.position.y + 0.35, penguinRoot.position.z);
+  return new BABYLON.Vector3(obelisk.position.x, obelisk.position.y + 0.7, obelisk.position.z);
+}
+
+function showOverlay(text, duration) {
+  infoEl.textContent = text;
+  overlayTimer = duration || 1.4;
+}
+
+function cycleFocus() {
+  focusIndex = (focusIndex + 1) % focusLabels.length;
+  showOverlay(`FOCUS ${focusLabels[focusIndex]}`, 1.5);
+}
+
+showOverlay(`FOCUS ${focusLabels[focusIndex]}`, 1.8);
+
+scene.registerBeforeRender(() => {
+  const dt = engine.getDeltaTime();
+  const dtS = dt * 0.001;
+  t += dtS;
+  overlayTimer = Math.max(0, overlayTimer - dtS);
+
+  const lookDelta = gestureInput.consumeLookDelta();
+  if (lookDelta.x || lookDelta.y) {
+    cameraYaw -= lookDelta.x * 0.01;
+    cameraPitch = clamp(cameraPitch + lookDelta.y * 0.006, 0.18, 1.05);
+    overlayTimer = Math.max(overlayTimer, 0.8);
+  }
+
+  const zoomDelta = gestureInput.consumeZoomDelta();
+  if (zoomDelta) {
+    cameraDistance = clamp(cameraDistance + zoomDelta * 0.018, 6.5, 18);
+    overlayTimer = Math.max(overlayTimer, 0.8);
+  }
+
+  // Orbit crystals
+  const meshes = scene.meshes;
+  meshes.forEach(m => {
+    if (m.name.startsWith('crystal') && m._orbitSpeed) {
+      m._orbitAngle += m._orbitSpeed * engine.getDeltaTime() * 0.001;
+      m.position.x = Math.cos(m._orbitAngle) * m._orbitRadius;
+      m.position.z = Math.sin(m._orbitAngle) * m._orbitRadius;
+      m.position.y = m._orbitHeight + Math.sin(t * m._orbitSpeed * 2) * 0.3;
+      m.rotation.y += 0.02;
+    }
+    if ((m.name.startsWith('d') || m.name.startsWith('spark')) && m._baseY !== undefined) {
+      m.position.y = m._baseY + Math.sin(t * m._floatSpeed + m._floatOffset) * 0.15;
+      m.rotation.x += 0.005 * m._floatSpeed;
+      m.rotation.z += 0.003 * m._floatSpeed;
+    }
+  });
+
+  // Penguin chases Andrey enemy sprite
+  if (penguinRoot) {
+    const enemySpr = andreyEnemySprite.spr;
+    const tx = enemySpr.position.x;
+    const tz = enemySpr.position.z;
+    const ty = 2.5 + Math.sin(t * 2.5) * 1.2; // vertical bob
+    penguinRoot.position.x += (tx - penguinRoot.position.x) * 0.025;
+    penguinRoot.position.y += (ty - penguinRoot.position.y) * 0.025;
+    penguinRoot.position.z += (tz - penguinRoot.position.z) * 0.025;
+    const ddx = tx - penguinRoot.position.x;
+    const ddz = tz - penguinRoot.position.z;
+    const dir = Math.atan2(ddx, ddz);
+    penguinRoot.rotation.y = dir;
+    penguinRoot.rotation.z = Math.sin(t * 2) * 0.25;
+    penguinRoot.rotation.x = Math.sin(t * 1.3) * 0.12;
+  }
+
+  // Pulse lights
+  point1.intensity = 1.2 + Math.sin(t * 1.5) * 0.4;
+  point2.intensity = 0.7 + Math.sin(t * 2.3 + 1) * 0.3;
+  point3.intensity = 0.5 + Math.sin(t * 1.8 + 2) * 0.25;
+  point1.position.x = Math.sin(t * 0.5) * 2;
+  point1.position.z = Math.cos(t * 0.5) * 2;
+
+  // Enemy state machine (stand / dodge / attack) + wander logic
+  {
+    const dtMs = engine.getDeltaTime();
+    const dtS = dtMs * 0.001;
+    const enemySpr = andreyEnemySprite.spr;
+
+    enemyStateTimer -= dtMs;
+    if (enemyStateTimer <= 0) {
+      if (enemyState === 'stand') {
+        setEnemyState(Math.random() > 0.5 ? 'dodge' : 'attack');
+      } else {
+        setEnemyState('stand');
+      }
+    }
+
+    enemyHeadingTimer -= dtMs;
+    if (enemyHeadingTimer <= 0) {
+      enemyHeading = Math.random() * Math.PI * 2;
+      enemyHeadingTimer = 800 + Math.random() * 1600;
+    }
+
+    if (enemyState === 'attack' && penguinRoot) {
+      const dx = penguinRoot.position.x - enemySpr.position.x;
+      const dz = penguinRoot.position.z - enemySpr.position.z;
+      enemyHeading = Math.atan2(dx, dz);
+      enemyHeadingTimer = 300;
+    }
+
+    const speed = ENEMY_STATE[enemyState].speed;
+    enemySpr.position.x += Math.cos(enemyHeading) * speed * dtS;
+    enemySpr.position.z += Math.sin(enemyHeading) * speed * dtS;
+    enemySpr.position.x = Math.max(-12, Math.min(12, enemySpr.position.x));
+    enemySpr.position.z = Math.max(-12, Math.min(12, enemySpr.position.z));
+    enemySpr.position.y = 2.3 + Math.sin(t * 2) * 0.1;
+
+    andreyEnemySprite.setDir(enemyHeading);
+  }
+  andreyEnemySprite.update(engine.getDeltaTime(), camera);
+
+  // JMYH sprite state machine
+  {
+    const dtMs = engine.getDeltaTime();
+    const dtS = dtMs * 0.001;
+    const spr = jmyhSprite.spr;
+
+    jmyhStateTimer -= dtMs;
+    if (jmyhStateTimer <= 0) {
+      if (jmyhState === 'stand') {
+        setJmyhState(Math.random() > 0.6 ? 'dodge' : 'attack');
+      } else if (jmyhState === 'attack') {
+        setJmyhState('stand');
+      } else {
+        setJmyhState(Math.random() > 0.5 ? 'stand' : 'attack');
+      }
+    }
+
+    jmyhHeadingTimer -= dtMs;
+    if (jmyhHeadingTimer <= 0) {
+      jmyhHeading = Math.random() * Math.PI * 2;
+      jmyhHeadingTimer = 1500 + Math.random() * 1500;
+    }
+
+    if (jmyhState === 'attack') {
+      const target = andreyEnemySprite.spr.position;
+      const dx = target.x - spr.position.x;
+      const dz = target.z - spr.position.z;
+      jmyhHeading = Math.atan2(dx, dz);
+      jmyhHeadingTimer = 300;
+    }
+
+    const speed = JMYH_STATE[jmyhState].speed;
+    spr.position.x += Math.cos(jmyhHeading) * speed * dtS;
+    spr.position.z += Math.sin(jmyhHeading) * speed * dtS;
+    spr.position.x = Math.max(-12, Math.min(12, spr.position.x));
+    spr.position.z = Math.max(-12, Math.min(12, spr.position.z));
+    spr.position.y = 2.2 + Math.sin(t * 1.5) * 0.08;
+
+    jmyhSprite.setDir(jmyhHeading);
+  }
+  jmyhSprite.update(engine.getDeltaTime(), camera);
+
+  // Andrey Livan sprite state machine
+  {
+    const dtMs = engine.getDeltaTime();
+    const dtS = dtMs * 0.001;
+    const spr = livanSprite.spr;
+
+    livanStateTimer -= dtMs;
+    if (livanStateTimer <= 0) {
+      if (livanState === 'stand') {
+        setLivanState(Math.random() > 0.5 ? 'dodge' : 'attack');
+      } else if (livanState === 'attack') {
+        setLivanState('stand');
+      } else {
+        setLivanState(Math.random() > 0.4 ? 'attack' : 'stand');
+      }
+    }
+
+    livanHeadingTimer -= dtMs;
+    if (livanHeadingTimer <= 0) {
+      livanHeading = Math.random() * Math.PI * 2;
+      livanHeadingTimer = 1000 + Math.random() * 1500;
+    }
+
+    if (livanState === 'attack') {
+      const target = jmyhSprite.spr.position;
+      const dx = target.x - spr.position.x;
+      const dz = target.z - spr.position.z;
+      livanHeading = Math.atan2(dx, dz);
+      livanHeadingTimer = 250;
+    }
+
+    const speed = LIVAN_STATE[livanState].speed;
+    spr.position.x += Math.cos(livanHeading) * speed * dtS;
+    spr.position.z += Math.sin(livanHeading) * speed * dtS;
+    spr.position.x = Math.max(-12, Math.min(12, spr.position.x));
+    spr.position.z = Math.max(-12, Math.min(12, spr.position.z));
+    spr.position.y = 2.2 + Math.sin(t * 1.8) * 0.06;
+
+    livanSprite.setDir(livanHeading);
+  }
+  livanSprite.update(engine.getDeltaTime(), camera);
+
+  const focus = focusPosition();
+  cameraFocus.x += (focus.x - cameraFocus.x) * camSmooth;
+  cameraFocus.y += (focus.y - cameraFocus.y) * camSmooth;
+  cameraFocus.z += (focus.z - cameraFocus.z) * camSmooth;
+  const offset = orbitOffset(cameraYaw, cameraPitch, cameraDistance);
+  camera.position.x += (cameraFocus.x + offset.x - camera.position.x) * 0.08;
+  camera.position.y += (cameraFocus.y + offset.y - camera.position.y) * 0.08;
+  camera.position.z += (cameraFocus.z + offset.z - camera.position.z) * 0.08;
+  camera.setTarget(cameraFocus);
+
+  overlayOpacity += (((overlayTimer > 0 ? 1 : 0) - overlayOpacity) * Math.min(1, dtS * 6));
+  titleEl.style.opacity = (overlayOpacity * 0.55).toFixed(3);
+  infoEl.style.opacity = overlayOpacity.toFixed(3);
+});
+
+engine.runRenderLoop(() => scene.render());
+window.addEventListener('resize', () => engine.resize());
+</script>
+<script>
+(function(){
+  var p=new URLSearchParams(location.search);
+  var embedded=p.get('embedded')==='1';
+  var preview=p.get('preview')==='1';
+  if(embedded){
+    var mc=document.getElementById('mode-chip');
+    if(mc)mc.style.display='none';
+  }
+  if(preview){
+    var h=document.getElementById('hud');if(h)h.style.display='none';
+    var hi=document.getElementById('hint');if(hi)hi.style.display='none';
+    var tc=document.getElementById('touch-controls');if(tc)tc.style.display='none';
+  }
+})();
+</script>
+</body>
+</html>

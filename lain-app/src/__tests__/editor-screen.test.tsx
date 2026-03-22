@@ -78,7 +78,7 @@ describe('EditorScreen', () => {
   it('renders the selected scene in embedded preview mode', () => {
     render(<EditorScreen />);
 
-    expect(screen.getByTestId('editor-scene-uri').props.children).toContain('mode=slasher');
+    expect(screen.getByTestId('editor-scene-uri').props.children).toContain('/slasher/');
     expect(screen.getByTestId('editor-scene-uri').props.children).toContain('embedded=1');
     expect(screen.getByTestId('editor-scene-uri').props.children).toContain('preview=1');
     expect(screen.getByTestId('editor-scene-uri').props.children).toContain('still=1');

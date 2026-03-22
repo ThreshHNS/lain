@@ -45,7 +45,7 @@ describe('GameScreen', () => {
   it('renders the selected scene in embedded game mode', () => {
     render(<GameScreen />);
 
-    expect(screen.getByTestId('game-scene-uri').props.children).toContain('mode=slasher');
+    expect(screen.getByTestId('game-scene-uri').props.children).toContain('/slasher/');
     expect(screen.getByTestId('game-scene-uri').props.children).toContain('embedded=1');
     expect(screen.getByTestId('game-scene-uri').props.children).not.toContain('preview=1');
     expect(screen.getByTestId('game-scene-interactive').props.children).toBe('true');
