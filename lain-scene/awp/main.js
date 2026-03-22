@@ -57,7 +57,10 @@ function createToneObjectUrl(frequency) {
 
 const rawMode = params.get('mode');
 const mode = resolveMode(rawMode || 'awp');
-const modeWasInvalid = Boolean(rawMode) && rawMode !== mode;
+const modeWasInvalid =
+  params.get('invalidModeFallback') === '1' || (Boolean(rawMode) && rawMode !== mode);
+const embeddedScene = params.get('embedded') === '1';
+const previewScene = params.get('preview') === '1';
 const staticScene = params.get('still') === '1';
 const targetImage = params.get('targetImage') || FALLBACK_TARGET_IMAGE;
 const awpMusic = params.get('awpMusic') || createToneObjectUrl(220);
@@ -120,9 +123,11 @@ function syncDomState() {
   body.dataset.assetState = state.assetState;
   body.dataset.audioState = state.audioState;
   body.dataset.dpadState = state.dpadState;
+  body.dataset.embedded = String(embeddedScene);
   body.dataset.lastAction = state.lastAction;
   body.dataset.mode = mode;
   body.dataset.movementState = state.movementState;
+  body.dataset.preview = String(previewScene);
   body.dataset.score = String(state.score);
   body.dataset.staticScene = String(staticScene);
   body.dataset.targetState = state.targetState;
@@ -133,8 +138,10 @@ function syncDomState() {
   modeChip.textContent = mode === 'slasher' ? 'mode: slasher' : 'mode: awp';
   hintLabel.textContent =
     mode === 'slasher'
-      ? 'hold enter / click / touch to move + slash'
-      : 'tap / click / enter / space to shoot';
+      ? embeddedScene
+        ? 'touch + hold to move // tap slash'
+        : 'hold enter / click / touch to move + slash'
+      : 'tap to shoot';
   scoreLabel.textContent = `score: ${state.score}`;
   weaponOverlay.dataset.state = state.weaponState;
   weaponOverlay.style.display = mode === 'awp' ? 'block' : 'none';

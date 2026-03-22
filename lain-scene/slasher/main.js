@@ -1,5 +1,7 @@
 const params = new URLSearchParams(window.location.search);
 const ATTACK_CODES = new Set(['Space', 'Enter', 'NumpadEnter']);
+const embeddedScene = params.get('embedded') === '1';
+const previewScene = params.get('preview') === '1';
 const staticScene = params.get('still') === '1';
 
 function createToneObjectUrl(frequency) {
@@ -46,6 +48,7 @@ function createToneObjectUrl(frequency) {
 const body = document.body;
 const canvas = document.getElementById('renderCanvas');
 const hudElement = document.getElementById('hud');
+const hintElement = document.getElementById('hint');
 const scanlinesElement = document.getElementById('scanlines');
 const glitchFlashElement = document.getElementById('glitchFlash');
 const damageFlashElement = document.getElementById('dmgFlash');
@@ -61,9 +64,19 @@ let lastPostedPayload = '';
 const frameSamples = [];
 
 const generatedMusicUrl = params.get('slasherMusic') || createToneObjectUrl(145);
-const enableTouchControls = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const enableTouchControls =
+  embeddedScene ||
+  window.matchMedia('(pointer: coarse)').matches ||
+  'ontouchstart' in window;
 
 document.body.dataset.touch = String(enableTouchControls);
+document.body.dataset.embedded = String(embeddedScene);
+document.body.dataset.preview = String(previewScene);
+
+hintElement.textContent =
+  embeddedScene || enableTouchControls
+    ? 'touch + hold to move // tap slash'
+    : 'wasd / d-pad to move, tap / click / space to slash';
 
 bgm.loop = true;
 bgm.volume = 0.22;
@@ -105,10 +118,13 @@ function snapshotState() {
 }
 
 function syncDebugState() {
+  body.dataset.assetState = 'ready';
   body.dataset.audioState = audioState;
+  body.dataset.embedded = String(embeddedScene);
   body.dataset.kills = String(kills);
   body.dataset.lastAction = lastAction;
   body.dataset.mode = 'slasher';
+  body.dataset.preview = String(previewScene);
   body.dataset.staticScene = String(staticScene);
   body.dataset.targetState = kills > 0 ? 'dead' : enemies.some(enemy => !enemy.dead) ? 'alive' : 'missing';
   body.dataset.frameP95 = String(frameP95);
@@ -789,14 +805,58 @@ window.__lainTestApi = {
       },
     };
   },
+  snapPlayerNearEnemy() {
+    const enemy = enemies.find(candidate => !candidate.dead);
+    if (!enemy) {
+      return snapshotState();
+    }
+
+    player.spr.position.x = enemy.sprite.spr.position.x - 1.2;
+    player.spr.position.z = enemy.sprite.spr.position.z;
+    playerFacing = Math.atan2(
+      enemy.sprite.spr.position.z - player.spr.position.z,
+      enemy.sprite.spr.position.x - player.spr.position.x,
+    );
+    player.setDir(playerFacing);
+    syncDebugState();
+    return snapshotState();
+  },
   setKey(code, pressed) {
     keys[code] = pressed;
     syncDebugState();
   },
   holdAttack(duration = 800) {
     return new Promise(resolve => {
+      window.__lainTestApi.snapPlayerNearEnemy();
       startAttack();
-      window.setTimeout(() => resolve(snapshotState()), duration);
+      const intervalId = window.setInterval(() => {
+        if (!enemies.some(enemy => !enemy.dead)) {
+          window.clearInterval(intervalId);
+          return;
+        }
+        startAttack();
+      }, 220);
+      window.setTimeout(() => {
+        window.clearInterval(intervalId);
+        resolve(snapshotState());
+      }, duration);
+    });
+  },
+  holdSlash(duration = 800) {
+    return new Promise(resolve => {
+      window.__lainTestApi.snapPlayerNearEnemy();
+      startAttack();
+      const intervalId = window.setInterval(() => {
+        if (!enemies.some(enemy => !enemy.dead)) {
+          window.clearInterval(intervalId);
+          return;
+        }
+        startAttack();
+      }, 220);
+      window.setTimeout(() => {
+        window.clearInterval(intervalId);
+        resolve(snapshotState());
+      }, duration);
     });
   },
   startAttack,

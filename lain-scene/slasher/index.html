@@ -141,7 +141,7 @@
 
       #touch-controls {
         position: fixed;
-        inset: auto 16px 20px 16px;
+        inset: auto 20px calc(22px + env(safe-area-inset-bottom)) 20px;
         z-index: 40;
         display: none;
         align-items: end;
@@ -154,23 +154,38 @@
         display: flex;
       }
 
+      body[data-embedded='true'] .mode-switcher,
+      body[data-embedded='true'] .route-transition {
+        display: none;
+      }
+
+      body[data-embedded='true'] #mode-chip {
+        display: none;
+      }
+
+      body[data-preview='true'] #hint,
+      body[data-preview='true'] #hud,
+      body[data-preview='true'] #touch-controls {
+        display: none;
+      }
+
       #dpad {
         display: grid;
-        grid-template-columns: repeat(3, 56px);
-        grid-template-rows: repeat(3, 56px);
-        gap: 8px;
+        grid-template-columns: repeat(3, 64px);
+        grid-template-rows: repeat(3, 64px);
+        gap: 10px;
         pointer-events: auto;
       }
 
       .touch-button {
         border: 1px solid rgba(255, 110, 57, 0.45);
-        border-radius: 18px;
-        background: rgba(15, 6, 9, 0.72);
+        border-radius: 22px;
+        background: rgba(18, 10, 14, 0.72);
         color: #ffd3c1;
-        font-size: 20px;
+        font-size: 22px;
         font-weight: 700;
-        backdrop-filter: blur(8px);
-        box-shadow: 0 0 18px rgba(138, 29, 6, 0.25);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 8px 30px rgba(138, 29, 6, 0.24);
         user-select: none;
         -webkit-user-select: none;
       }
@@ -202,11 +217,11 @@
       }
 
       #attack-button {
-        width: 104px;
-        height: 104px;
+        width: 120px;
+        height: 120px;
         border-radius: 999px;
-        font-size: 16px;
-        letter-spacing: 1px;
+        font-size: 17px;
+        letter-spacing: 1.4px;
         pointer-events: auto;
       }
     </style>
@@ -225,7 +240,7 @@
     <div class="route-transition" aria-hidden="true"></div>
 
     <div id="mode-chip">mode: slasher</div>
-    <div id="hint">wasd / d-pad to move, tap / click / space to slash</div>
+    <div id="hint">touch + hold to move // tap slash</div>
     <canvas id="renderCanvas"></canvas>
     <div id="scanlines"></div>
     <div id="vignette"></div>
