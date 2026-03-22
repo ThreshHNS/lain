@@ -1,5 +1,8 @@
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import { Platform } from 'react-native';
+
+import IOSInstallBanner from '@/components/ios-install-banner';
 
 export default function RootLayout() {
   return (
@@ -27,6 +30,7 @@ export default function RootLayout() {
           }}
         />
       </Stack>
+      {Platform.OS === 'web' && <IOSInstallBanner />}
     </ThemeProvider>
   );
 }
