@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>lain scene</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="hud">
+      <div id="mode-chip"></div>
+      <div id="hint">tap / click / space</div>
+      <div id="score">score: 0</div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="weapon-overlay" class="idle"></div>
+    <canvas id="renderCanvas"></canvas>
+    <audio id="bgm" loop playsinline></audio>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
