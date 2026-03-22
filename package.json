@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "scripts": {
+    "test:app": "npm --prefix ./lain-app test",
+    "test:scene": "npm --prefix ./lain-scene test",
+    "test:maestro:smoke": "npm --prefix ./lain-app run test:maestro:smoke"
+  }
+}

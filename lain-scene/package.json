@@ -2,6 +2,12 @@
   "name": "lain-scene",
   "private": true,
   "scripts": {
-    "dev": "python3 -m http.server 4173"
+    "dev": "python3 -m http.server 4173",
+    "test": "playwright test",
+    "test:update-snapshots": "playwright test --update-snapshots",
+    "test:install-browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
   }
 }

@@ -7,6 +7,18 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <title>lain scene</title>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+
+        if (params.get('mode') === 'slasher') {
+          const nextUrl = new URL('./slasher.html', window.location.href);
+          nextUrl.search = window.location.search;
+          nextUrl.hash = window.location.hash;
+          window.location.replace(nextUrl.toString());
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
