@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AssetReference } from '@/types/editor';
+import { useSceneEditor } from '@/context/scene-editor-context';
 
 const SAMPLE_ASSETS: AssetReference[] = [
   {
@@ -33,20 +34,10 @@ const SAMPLE_ASSETS: AssetReference[] = [
   },
 ];
 
-type AssetPickerProps = {
-  onSelect?: (asset: AssetReference) => void;
-};
+export default function AssetPicker() {
+  const { assets, addAsset } = useSceneEditor();
 
-export default function AssetPicker({ onSelect }: AssetPickerProps) {
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-
-  const handleToggle = (asset: AssetReference) => {
-    const next = !selected[asset.id];
-    setSelected(prev => ({ ...prev, [asset.id]: next }));
-    if (next) {
-      onSelect?.(asset);
-    }
-  };
+  const selectedIds = useMemo(() => new Set(assets.map(asset => asset.id)), [assets]);
 
   return (
     <View style={styles.container}>
@@ -65,10 +56,13 @@ export default function AssetPicker({ onSelect }: AssetPickerProps) {
               <Text style={styles.linkText}>View</Text>
             </Pressable>
             <Pressable
-              style={[styles.selectButton, selected[item.id] && styles.selectButtonActive]}
-              onPress={() => handleToggle(item)}>
+              style={[
+                styles.selectButton,
+                selectedIds.has(item.id) && styles.selectButtonActive,
+              ]}
+              onPress={() => addAsset(item)}>
               <Text style={styles.selectText}>
-                {selected[item.id] ? 'Selected' : 'Select asset'}
+                {selectedIds.has(item.id) ? 'Selected' : 'Select asset'}
               </Text>
             </Pressable>
           </View>

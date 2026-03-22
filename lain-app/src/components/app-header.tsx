@@ -1,44 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { SlotHint, HistoryEntry, ActiveUser } from '@/types/editor';
+import { SlotHint } from '@/types/editor';
 import AvatarStack from './avatar-stack';
 import HistoryDropdown from './history-dropdown';
 import { useVoiceRecorder } from '@/hooks/use-voice-recorder';
+import { useSceneEditor } from '@/context/scene-editor-context';
 
 type AppHeaderProps = {
   sceneTitle: string;
-  onVoiceCaptured?: (uri: string, slot?: SlotHint) => void;
 };
-
-const MOCK_USERS: ActiveUser[] = [
-  { id: 'u1', name: 'Lain', isOnline: true },
-  { id: 'u2', name: 'Ava', isOnline: false },
-  { id: 'u3', name: 'Codex', isOnline: true },
-];
-
-const MOCK_HISTORY: HistoryEntry[] = [
-  {
-    id: 'h1',
-    actor: MOCK_USERS[0],
-    timestamp: new Date().toISOString(),
-    label: 'Voice prompt for walk slot',
-    slot: 'walk',
-    type: 'voice',
-  },
-  {
-    id: 'h2',
-    actor: MOCK_USERS[1],
-    timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
-    label: 'Pinned kill animation frame',
-    slot: 'kill',
-    type: 'asset',
-  },
-];
 
 const SLOT_HINTS: SlotHint[] = ['walk', 'kill', 'seed', 'idle'];
 
 export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProps) {
-  const [slotHint, setSlotHint] = useState<SlotHint>('walk');
+  const { slotHint, setSlotHint, history, collaborators, addHistory } = useSceneEditor();
   const { status, audioUri, startRecording, stopRecording, reset } = useVoiceRecorder();
 
   const buttonLabel = useMemo(() => {
@@ -57,7 +32,12 @@ export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProp
   const handleVoiceEnd = async () => {
     await stopRecording();
     if (audioUri) {
-      onVoiceCaptured?.(audioUri, slotHint);
+    addHistory({
+      label: 'Voice prompt recorded',
+      timestamp: new Date().toISOString(),
+      slot: slotHint,
+      type: 'voice',
+    });
       reset();
     }
   };
@@ -103,8 +83,8 @@ export default function AppHeader({ sceneTitle, onVoiceCaptured }: AppHeaderProp
       </View>
 
       <View style={styles.rightBlock}>
-        <HistoryDropdown entries={MOCK_HISTORY} />
-        <AvatarStack users={MOCK_USERS} />
+        <HistoryDropdown entries={history} />
+        <AvatarStack users={collaborators} />
       </View>
     </View>
   );

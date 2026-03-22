@@ -22,36 +22,18 @@ import {
 import AppHeader from '@/components/app-header';
 import AssetPicker from '@/components/asset-picker';
 import HistoryPanel from '@/components/history-panel';
-import type { HistoryEntry, SlotHint } from '@/types/editor';
-import AppHeader from '@/components/app-header';
+import { SceneEditorProvider, useSceneEditor } from '@/context/scene-editor-context';
 
 const E2E_DEBUG_ENABLED = process.env.EXPO_PUBLIC_E2E_DEBUG === '1';
 
-const HISTORY_ENTRIES: HistoryEntry[] = [
-  {
-    id: 'history-1',
-    actor: { id: 'u1', name: 'Lain', isOnline: true },
-    timestamp: new Date().toISOString(),
-    label: 'Voice prompt calibrated for walk slot',
-    slot: 'walk',
-    type: 'voice',
-  },
-  {
-    id: 'history-2',
-    actor: { id: 'u3', name: 'Codex', isOnline: true },
-    timestamp: new Date(Date.now() - 45 * 60000).toISOString(),
-    label: 'Added PolyPizza corridor asset',
-    type: 'asset',
-  },
-];
-
-export default function HomeScreen() {
+function HomeScreenContent() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const listRef = useRef<FlatList<(typeof MODE_OPTIONS)[number]>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [version, setVersion] = useState(() => Date.now());
+  const { history } = useSceneEditor();
 
   const handleRetry = useCallback(() => {
     setVersion(Date.now());
@@ -87,15 +69,11 @@ export default function HomeScreen() {
     [height, scenes.length],
   );
 
-  const handleVoiceCaptured = useCallback((uri: string, slot?: SlotHint) => {
-    console.log('voice captured', { uri, slot });
-  }, []);
-
   return (
     <View style={styles.container} testID="scene-feed-screen">
       <StatusBar style="light" />
-      <AppHeader sceneTitle="Scene selector" onVoiceCaptured={handleVoiceCaptured} />
-      <HistoryPanel entries={HISTORY_ENTRIES} />
+      <AppHeader sceneTitle="Scene selector" />
+      <HistoryPanel entries={history} />
       <AssetPicker />
 
       <FlatList
@@ -147,6 +125,14 @@ export default function HomeScreen() {
         </GlassSurface>
       </View>
     </View>
+  );
+}
+
+export default function HomeScreen() {
+  return (
+    <SceneEditorProvider>
+      <HomeScreenContent />
+    </SceneEditorProvider>
   );
 }
 
