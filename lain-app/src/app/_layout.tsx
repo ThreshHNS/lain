@@ -16,17 +16,17 @@ export default function RootLayout() {
         <Stack.Screen
           name="game"
           options={{
-            animation: 'fade',
-            headerShown: true,
-            presentation: 'fullScreenModal',
+            animation: Platform.OS === 'web' ? 'none' : 'fade',
+            headerShown: false,
+            presentation: Platform.OS === 'web' ? 'card' : 'fullScreenModal',
           }}
         />
         <Stack.Screen
           name="editor"
           options={{
-            animation: 'fade',
+            animation: Platform.OS === 'web' ? 'none' : 'fade',
             headerShown: true,
-            presentation: 'fullScreenModal',
+            presentation: Platform.OS === 'web' ? 'card' : 'fullScreenModal',
           }}
         />
       </Stack>

@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import GlassSurface from '@/components/glass-surface';
 import SceneFrame from '@/components/scene-frame';
@@ -13,6 +14,7 @@ import {
   Mode,
   resolveMode,
 } from '@/lib/scene-config';
+import { navigateToWebAppHome, navigateWithinWebApp } from '@/lib/web-navigation';
 
 type SceneBridgeState = {
   assetState?: string;
@@ -60,6 +62,7 @@ function buildDebugTokens(mode: Mode, sceneState: SceneBridgeState | null) {
 
 export default function GameScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ mode?: string | string[] }>();
   const [version] = useState(() => Date.now());
   const [sceneState, setSceneState] = useState<SceneBridgeState | null>(null);
@@ -79,36 +82,63 @@ export default function GameScreen() {
       setSceneState(nextState);
     }
   }, []);
+  const handleEdit = useCallback(() => {
+    if (navigateWithinWebApp('editor', { mode })) {
+      return;
+    }
+
+    router.push({
+      pathname: '/editor',
+      params: { mode },
+    });
+  }, [mode, router]);
+  const handleClose = useCallback(() => {
+    if (navigateToWebAppHome()) {
+      return;
+    }
+
+    router.back();
+  }, [router]);
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: scene.label,
-          headerBackVisible: false,
-          headerShadowVisible: false,
-          headerTransparent: true,
-          headerRight: () => (
+          animation: 'none',
+          headerShown: false,
+        }}
+      />
+      <View style={styles.container} testID="game-screen">
+        <StatusBar hidden style="light" />
+        <SceneFrame
+          interactive
+          onFrameMessage={handleFrameMessage}
+          testID="scene-game-frame"
+          uri={uri}
+        />
+        <View pointerEvents="box-none" style={[styles.chrome, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.topRail}>
+            <GlassSurface style={styles.sceneChip}>
+              <Text style={styles.sceneChipText}>{scene.label}</Text>
+            </GlassSurface>
+
             <View style={styles.headerActions}>
               <Pressable
                 accessibilityLabel="edit scene"
                 accessibilityRole="button"
                 accessible
                 hitSlop={8}
-                onPress={() =>
-                  router.push({
-                    pathname: '/editor',
-                    params: { mode },
-                  })
-                }
+                onPress={handleEdit}
                 style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
                 testID="game-edit-button">
-                <SymbolView
-                  name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
-                  size={15}
-                  tintColor="#fff7f1"
-                  weight="semibold"
-                />
+                <GlassSurface interactive style={styles.headerButtonSurface}>
+                  <SymbolView
+                    name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                    size={15}
+                    tintColor="#fff7f1"
+                    weight="semibold"
+                  />
+                </GlassSurface>
               </Pressable>
 
               <Pressable
@@ -116,28 +146,21 @@ export default function GameScreen() {
                 accessibilityRole="button"
                 accessible
                 hitSlop={8}
-                onPress={() => router.back()}
+                onPress={handleClose}
                 style={({ pressed }) => [styles.headerButton, pressed && styles.headerButtonPressed]}
                 testID="game-close-button">
-                <SymbolView
-                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                  size={16}
-                  tintColor="#fff7f1"
-                  weight="bold"
-                />
+                <GlassSurface interactive style={styles.headerButtonSurface}>
+                  <SymbolView
+                    name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                    size={16}
+                    tintColor="#fff7f1"
+                    weight="bold"
+                  />
+                </GlassSurface>
               </Pressable>
             </View>
-          ),
-        }}
-      />
-      <View style={styles.container} testID="game-screen">
-        <StatusBar style="light" />
-        <SceneFrame
-          interactive
-          onFrameMessage={handleFrameMessage}
-          testID="scene-game-frame"
-          uri={uri}
-        />
+          </View>
+        </View>
         {E2E_DEBUG_ENABLED ? (
           <View pointerEvents="none" style={styles.debugRail}>
             <GlassSurface style={styles.debugPanel}>
@@ -196,11 +219,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#050608',
   },
+  chrome: {
+    ...StyleSheet.absoluteFillObject,
+    paddingHorizontal: 14,
+  },
+  topRail: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sceneChip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  sceneChipText: {
+    color: '#fff6ef',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   headerActions: {
     flexDirection: 'row',
     gap: 8,
   },
   headerButton: {
+    borderRadius: 999,
+  },
+  headerButtonSurface: {
     alignItems: 'center',
     borderRadius: 999,
     height: 42,

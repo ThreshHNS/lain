@@ -20,6 +20,7 @@ import {
   Mode,
   SceneOption,
 } from '@/lib/scene-config';
+import { navigateWithinWebApp } from '@/lib/web-navigation';
 
 const E2E_DEBUG_ENABLED = process.env.EXPO_PUBLIC_E2E_DEBUG === '1';
 type ScenePreview = SceneOption & { previewUri: string };
@@ -55,6 +56,10 @@ function HomeScreenContent() {
 
   const handlePlay = useCallback(
     (mode: Mode) => {
+      if (navigateWithinWebApp('game', { mode })) {
+        return;
+      }
+
       router.push({
         pathname: '/game',
         params: { mode },
@@ -152,6 +157,7 @@ const styles = StyleSheet.create({
   },
   stageSection: {
     alignItems: 'center',
+    flex: 1,
   },
   stageShell: {
     overflow: 'hidden',
