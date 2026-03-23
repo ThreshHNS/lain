@@ -47,7 +47,7 @@ export default function SceneFeedCard({
           <Text style={styles.sceneChipText}>{scene.label}</Text>
         </GlassSurface>
 
-        <View style={styles.bottomRail}>
+        <View pointerEvents="auto" style={styles.bottomRail}>
           <GlassSurface style={styles.metaCard}>
             <Text style={styles.sceneSubtitle}>{scene.subtitle}</Text>
             <Text style={styles.sceneTitle}>{scene.label}</Text>

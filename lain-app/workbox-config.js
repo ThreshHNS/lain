@@ -7,4 +7,7 @@ module.exports = {
   skipWaiting: true,
   navigateFallback: 'index.html',
   navigateFallbackDenylist: [/\/scenes\//],
+  // Scene URLs include ?v=, ?embedded=, ?preview=, ?still= — ignore them when
+  // looking up precached scene HTML so the SW can serve offline without refetching.
+  ignoreURLParametersMatching: [/^v$/, /^embedded$/, /^preview$/, /^still$/],
 };
