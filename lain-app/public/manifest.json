@@ -6,7 +6,7 @@
   "orientation": "portrait",
   "start_url": "./",
   "scope": "./",
-  "id": "/",
+  "id": "./",
   "background_color": "#050608",
   "theme_color": "#050608",
   "categories": ["games", "entertainment"],
