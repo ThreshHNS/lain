@@ -30,6 +30,7 @@ export default function SceneFrame({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const frameState = failed ? 'error' : loading ? 'loading' : 'ready';
+  const iframeStyle = StyleSheet.flatten([styles.iframe, !interactive && styles.iframeStatic]);
 
   useEffect(() => {
     setLoading(true);
@@ -60,7 +61,7 @@ export default function SceneFrame({
           onFrameLoadEnd?.();
         }}
         src={uri}
-        style={[styles.iframe, !interactive && styles.iframeStatic] as never}
+        style={iframeStyle}
         title="lain-scene"
       />
       {failed ? (
@@ -108,7 +109,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   iframe: {
+    backgroundColor: '#080607',
     borderWidth: 0,
+    display: 'block',
     flex: 1,
     height: '100%',
     width: '100%',
