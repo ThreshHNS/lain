@@ -3,13 +3,16 @@ tags:
   - smoke
   - p0
 ---
-- launchApp
-- scrollUntilVisible:
-    direction: DOWN
-    element:
-      id: scene-play-slasher
+- launchApp:
+    clearState: true
 - tapOn:
-    id: scene-play-slasher
+    id: scene-tv-next-button
+- assertVisible:
+    id: scene-active-mode-slasher
+- tapOn:
+    id: scene-tv-play-button
+- assertVisible:
+    id: game-screen
 - extendedWaitUntil:
     visible:
       id: scene-debug-mode-slasher

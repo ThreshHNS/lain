@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import GlassSurface from './glass-surface';
 
 type SceneFrameProps = {
+  editorBackdropActive?: boolean;
   interactive?: boolean;
+  muted?: boolean;
   uri: string;
   testID?: string;
   onFrameError?: () => void;
@@ -17,7 +19,9 @@ type SceneFrameProps = {
 };
 
 export default function SceneFrame({
+  editorBackdropActive = false,
   interactive = true,
+  muted = false,
   uri,
   testID,
   onFrameError,
@@ -27,10 +31,31 @@ export default function SceneFrame({
   retryTestID,
   statusTestID,
 }: SceneFrameProps) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const frameState = failed ? 'error' : loading ? 'loading' : 'ready';
-  const iframeStyle = StyleSheet.flatten([styles.iframe, !interactive && styles.iframeStatic]);
+  const iframeStyle = StyleSheet.flatten([
+    styles.iframe,
+    !interactive && styles.iframeStatic,
+  ]) as CSSProperties;
+  const applyMutedState = useCallback(() => {
+    try {
+      const documentNode = iframeRef.current?.contentWindow?.document;
+      if (!documentNode) {
+        return;
+      }
+
+      documentNode.querySelectorAll('audio, video').forEach(mediaNode => {
+        const mediaElement = mediaNode as HTMLMediaElement;
+        mediaElement.defaultMuted = muted;
+        mediaElement.muted = muted;
+      });
+      documentNode.body?.setAttribute('data-shell-muted', String(muted));
+    } catch {
+      // Cross-origin iframes cannot be controlled on web. Native uses WebView injection.
+    }
+  }, [muted]);
 
   useEffect(() => {
     setLoading(true);
@@ -38,11 +63,19 @@ export default function SceneFrame({
     onFrameLoadStart?.();
   }, [onFrameLoadStart, uri]);
 
+  useEffect(() => {
+    applyMutedState();
+  }, [applyMutedState]);
+
   return (
     <View style={styles.frame} testID="scene-frame-root">
       {statusTestID ? (
         <View pointerEvents="none" style={styles.statusBadge}>
-          <Text style={styles.statusLabel} testID={`${statusTestID}-${frameState}`}>
+          <Text
+            accessibilityLabel={`${statusTestID}-${frameState}`}
+            accessible
+            style={styles.statusLabel}
+            testID={`${statusTestID}-${frameState}`}>
             {frameState}
           </Text>
         </View>
@@ -50,6 +83,7 @@ export default function SceneFrame({
       <iframe
         allow="autoplay; fullscreen"
         data-testid={testID}
+        ref={iframeRef}
         onError={() => {
           setLoading(false);
           setFailed(true);
@@ -58,19 +92,26 @@ export default function SceneFrame({
         onLoad={() => {
           setLoading(false);
           setFailed(false);
+          applyMutedState();
           onFrameLoadEnd?.();
         }}
         src={uri}
         style={iframeStyle}
         title="lain-scene"
       />
+      {editorBackdropActive ? <View pointerEvents="none" style={styles.editorBackdropMask} /> : null}
       {failed ? (
         <View pointerEvents="box-none" style={styles.failureOverlay}>
           <GlassSurface style={styles.failureCard}>
             <Text style={styles.failureTitle}>Scene unavailable</Text>
             <Text style={styles.failureBody}>Reload scene host and retry preview.</Text>
             {onRetry ? (
-              <Pressable onPress={onRetry} testID={retryTestID}>
+              <Pressable
+                accessibilityLabel={retryTestID}
+                accessibilityRole="button"
+                accessible
+                onPress={onRetry}
+                testID={retryTestID}>
                 {({ pressed }) => (
                   <GlassSurface interactive style={[styles.retryButton, pressed && styles.retryButtonPressed]}>
                     <Text style={styles.retryLabel}>Retry</Text>
@@ -94,6 +135,7 @@ const styles = StyleSheet.create({
   frame: {
     flex: 1,
     backgroundColor: '#080607',
+    overflow: 'hidden',
   },
   statusBadge: {
     position: 'absolute',
@@ -109,12 +151,20 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   iframe: {
-    backgroundColor: '#080607',
     borderWidth: 0,
-    display: 'block',
     flex: 1,
     height: '100%',
     width: '100%',
+  },
+  editorBackdropMask: {
+    backgroundColor: 'rgba(8, 6, 7, 0.18)',
+    boxShadow: '0 24px 48px rgba(8, 6, 7, 0.26)',
+    height: 168,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 2,
   },
   iframeStatic: {
     pointerEvents: 'none',

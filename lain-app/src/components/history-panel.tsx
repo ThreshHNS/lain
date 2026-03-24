@@ -1,11 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { HistoryEntry } from '@/types/editor';
+import GlassSurface from './glass-surface';
 
 type HistoryPanelProps = {
   entries: HistoryEntry[];
+  variant?: 'solid' | 'glass';
 };
 
-export default function HistoryPanel({ entries }: HistoryPanelProps) {
+export default function HistoryPanel({ entries, variant = 'solid' }: HistoryPanelProps) {
   const recentEntries = [...entries]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 3);
@@ -14,8 +16,8 @@ export default function HistoryPanel({ entries }: HistoryPanelProps) {
     return null;
   }
 
-  return (
-    <View style={styles.panel}>
+  const content = (
+    <>
       <View style={styles.header}>
         <Text style={styles.heading}>Recent activity</Text>
         <Text style={styles.count}>{recentEntries.length} latest</Text>
@@ -38,8 +40,14 @@ export default function HistoryPanel({ entries }: HistoryPanelProps) {
           </View>
         ))}
       </View>
-    </View>
+    </>
   );
+
+  if (variant === 'glass') {
+    return <GlassSurface style={[styles.panel, styles.panelGlass]}>{content}</GlassSurface>;
+  }
+
+  return <View style={styles.panel}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -51,6 +59,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 18,
     paddingVertical: 16,
+  },
+  panelGlass: {
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   header: {
     alignItems: 'center',

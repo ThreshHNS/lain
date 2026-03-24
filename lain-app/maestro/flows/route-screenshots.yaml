@@ -1,0 +1,27 @@
+appId: com.avelts.lain
+tags:
+  - screenshots
+  - routes
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: Cancel
+    optional: true
+- assertVisible:
+    id: scene-feed-screen
+- takeScreenshot: route-home-feed
+- tapOn:
+    id: scene-play-awp
+- assertVisible:
+    id: game-screen
+- extendedWaitUntil:
+    visible:
+      id: game-edit-button
+    timeout: 15000
+- takeScreenshot: route-game-awp
+- tapOn:
+    id: game-edit-button
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: route-editor-awp

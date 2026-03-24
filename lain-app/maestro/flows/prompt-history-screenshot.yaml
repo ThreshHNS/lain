@@ -1,0 +1,10 @@
+appId: com.avelts.lain
+tags:
+  - screenshots
+  - routes
+---
+- tapOn:
+    text: Open
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: route-prompt-history-awp

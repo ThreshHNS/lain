@@ -3,7 +3,8 @@ tags:
   - fallback
   - p0
 ---
-- launchApp
+- launchApp:
+    clearState: true
 - tapOn:
     id: scene-break-button
 - extendedWaitUntil:

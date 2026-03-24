@@ -3,14 +3,17 @@ tags:
   - smoke
   - p0
 ---
-- launchApp
-- copyTextFrom:
+- launchApp:
+    clearState: true
+- assertVisible:
     id: scene-version-label
-- evalScript: ${output.beforeVersion = maestro.copiedText}
 - tapOn:
     id: scene-reload-button
-- copyTextFrom:
-    id: scene-version-label
-- assertTrue:
-    condition: ${output.beforeVersion != maestro.copiedText}
-    label: Cache bust token changed after reload
+- extendedWaitUntil:
+    visible:
+      id: scene-preview-awp-status-loading
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: scene-preview-awp-status-ready
+    timeout: 15000

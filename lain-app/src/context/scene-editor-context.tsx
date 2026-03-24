@@ -19,6 +19,19 @@ const COLLABORATORS: ActiveUser[] = [
   { id: 'u3', name: 'Codex', isOnline: true },
 ];
 
+function mapMessageSourceToHistoryType(source: string | null | undefined): HistoryEntry['type'] {
+  if (source === 'asset') {
+    return 'asset';
+  }
+  if (source === 'photo') {
+    return 'photo';
+  }
+  if (source === 'text') {
+    return 'text';
+  }
+  return 'voice';
+}
+
 type SceneEditorContextValue = {
   slotHint: SlotHint;
   setSlotHint: (hint: SlotHint) => void;
@@ -26,8 +39,15 @@ type SceneEditorContextValue = {
   assets: AssetReference[];
   addHistory: (entry: Omit<HistoryEntry, 'id' | 'actor'>) => void;
   addAsset: (asset: AssetReference) => void;
+  removeAsset: (assetId: string) => void;
   collaborators: ActiveUser[];
   sessionId: string | null;
+};
+
+type SceneEditorProviderProps = {
+  children: ReactNode;
+  initialSessionId?: string | null;
+  initialSessionTitle?: string;
 };
 
 const SceneEditorContext = createContext<SceneEditorContextValue | null>(null);
@@ -36,25 +56,33 @@ function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 }
 
-export function SceneEditorProvider({ children }: { children: ReactNode }) {
+export function SceneEditorProvider({
+  children,
+  initialSessionId = null,
+  initialSessionTitle = 'Scene editor draft',
+}: SceneEditorProviderProps) {
   const [slotHint, setSlotHint] = useState<SlotHint>('walk');
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [assets, setAssets] = useState<AssetReference[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(initialSessionId);
 
   useEffect(() => {
     let active = true;
 
     (async () => {
       try {
-        const session = await createPromptSession('Scene editor draft', 'local-creator');
+        const nextSessionId =
+          initialSessionId ??
+          (
+            await createPromptSession(initialSessionTitle, 'local-creator')
+          ).id;
         if (!active) {
           return;
         }
 
-        setSessionId(session.id);
+        setSessionId(nextSessionId);
 
-        const messages = await fetchPromptMessages(session.id);
+        const messages = await fetchPromptMessages(nextSessionId);
         if (!active) {
           return;
         }
@@ -66,7 +94,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
           slot: msg.slot === 'walk' || msg.slot === 'kill' || msg.slot === 'seed' || msg.slot === 'idle'
             ? msg.slot
             : undefined,
-          type: 'voice',
+          type: mapMessageSourceToHistoryType(msg.source),
           timestamp: msg.createdAt,
         })));
       } catch (error) {
@@ -77,7 +105,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialSessionId, initialSessionTitle]);
 
   const addHistory = useCallback((entry: Omit<HistoryEntry, 'id' | 'actor'>) => {
     const optimisticEntry: HistoryEntry = {
@@ -96,7 +124,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    appendPromptMessage(sessionId, entry.label, entry.slot ?? null)
+    appendPromptMessage(sessionId, entry.label, entry.slot ?? null, entry.type ?? 'voice')
       .then(message => {
         setHistory(prev =>
           prev.map(item =>
@@ -112,7 +140,7 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
                     message.slot === 'idle'
                       ? message.slot
                       : undefined,
-                  type: entry.type ?? 'voice',
+                  type: mapMessageSourceToHistoryType(message.source),
                   timestamp: message.createdAt,
                   audioUri: entry.audioUri,
                 }
@@ -136,12 +164,17 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
 
       addHistory({
         label: `Added ${asset.name}`,
+        slot: asset.slot,
         timestamp: new Date().toISOString(),
         type: 'asset',
       });
     },
     [addHistory],
   );
+
+  const removeAsset = useCallback((assetId: string) => {
+    setAssets(prev => prev.filter(asset => asset.id !== assetId));
+  }, []);
 
   const value = useMemo(
     () => ({
@@ -151,10 +184,11 @@ export function SceneEditorProvider({ children }: { children: ReactNode }) {
       assets,
       addHistory,
       addAsset,
+      removeAsset,
       collaborators: COLLABORATORS,
       sessionId,
     }),
-    [slotHint, history, assets, addHistory, addAsset, sessionId],
+    [slotHint, history, assets, addHistory, addAsset, removeAsset, sessionId],
   );
 
   return <SceneEditorContext.Provider value={value}>{children}</SceneEditorContext.Provider>;
