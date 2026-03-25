@@ -158,7 +158,7 @@ describe('HomeScreen', () => {
   it('switches the active scene from the right-side pager', () => {
     render(<HomeScreen />);
 
-    expect(screen.getByTestId('scene-card-awp-active').props.children).toBe('true');
+    expect(screen.getByTestId('scene-card-tomato-grid-active').props.children).toBe('true');
 
     fireEvent.press(screen.getByTestId('scene-feed-dot-slasher'));
 
@@ -177,13 +177,13 @@ describe('HomeScreen', () => {
 
     render(<HomeScreen />);
 
-    expect(screen.getByTestId('scene-card-awp-active').props.children).toBe('true');
+    expect(screen.getByTestId('scene-card-tomato-grid-active').props.children).toBe('true');
 
     act(() => {
       pressKey('ArrowDown');
     });
 
-    expect(screen.getByTestId('scene-card-slasher-active').props.children).toBe('true');
+    expect(screen.getByTestId('scene-card-tomato-guard-active').props.children).toBe('true');
 
     act(() => {
       pressKey('Enter');
@@ -191,7 +191,7 @@ describe('HomeScreen', () => {
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/game',
-      params: { mode: 'slasher' },
+      params: { mode: 'tomato-guard' },
     });
   });
 
@@ -201,7 +201,7 @@ describe('HomeScreen', () => {
     render(<HomeScreen />);
 
     expect(screen.getByTestId('scene-version-label')).toBeTruthy();
-    expect(screen.getByTestId('scene-card-awp-active').props.children).toBe('true');
+    expect(screen.getByTestId('scene-card-tomato-grid-active').props.children).toBe('true');
 
     fireEvent.press(screen.getByTestId('scene-feed-dot-slasher'));
     expect(screen.getByTestId('scene-card-slasher-active').props.children).toBe('true');
@@ -218,16 +218,20 @@ describe('HomeScreen', () => {
 
     render(<HomeScreen />);
 
-    const initialUri = screen.getByTestId('scene-preview-awp-uri').props.children as string;
-    expect(initialUri).toContain('/awp/');
+    const initialUri = screen.getByTestId('scene-preview-tomato-grid-uri').props.children as string;
+    expect(initialUri).toContain('/tomato-grid/');
     expect(initialUri).not.toContain('example.invalid');
 
     fireEvent.press(screen.getByTestId('scene-break-button'));
-    expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('example.invalid');
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).toContain(
+      'example.invalid',
+    );
 
     fireEvent.press(screen.getByTestId('scene-reload-button'));
-    expect(screen.getByTestId('scene-preview-awp-uri').props.children).toContain('/awp/');
-    expect(screen.getByTestId('scene-preview-awp-uri').props.children).not.toContain(
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).toContain(
+      '/tomato-grid/',
+    );
+    expect(screen.getByTestId('scene-preview-tomato-grid-uri').props.children).not.toContain(
       'example.invalid',
     );
   });

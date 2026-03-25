@@ -10,6 +10,7 @@ import {
   ActionSheetIOS,
   Alert,
   Animated,
+  Easing,
   KeyboardAvoidingView,
   LayoutChangeEvent,
   Modal,
@@ -229,6 +230,7 @@ function EditorScreenContent() {
   const params = useLocalSearchParams<{
     inputModel?: string | string[];
     mode?: string | string[];
+    overlayScene?: string | string[];
     promptSessionId?: string | string[];
     sceneDraftId?: string | string[];
     title?: string | string[];
@@ -250,8 +252,10 @@ function EditorScreenContent() {
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const [voiceGestureState, setVoiceGestureState] = useState<'idle' | 'holding' | 'primed'>('idle');
   const rawMode = Array.isArray(params.mode) ? params.mode[0] : params.mode;
+  const rawOverlayScene = Array.isArray(params.overlayScene) ? params.overlayScene[0] : params.overlayScene;
   const hasSceneMode = typeof rawMode === 'string' && rawMode.trim().length > 0;
   const mode = resolveMode(rawMode);
+  const shouldReusePresentedScene = Platform.OS !== 'web' && rawOverlayScene === '1';
   const draftTitle = Array.isArray(params.title) ? params.title[0] : params.title;
   const sceneDraftId = Array.isArray(params.sceneDraftId) ? params.sceneDraftId[0] : params.sceneDraftId;
   const scene = getSceneOption(mode);
@@ -268,6 +272,7 @@ function EditorScreenContent() {
   const scrollViewportHeightRef = useRef(0);
   const scrollContentHeightRef = useRef(0);
   const isNearBottomRef = useRef(true);
+  const editorSceneOverlayOpacity = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
   const actionMorphScale = useRef(new Animated.Value(1)).current;
   const threadEntries = useMemo(
@@ -339,6 +344,16 @@ function EditorScreenContent() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    editorSceneOverlayOpacity.setValue(0);
+    Animated.timing(editorSceneOverlayOpacity, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [editorSceneOverlayOpacity]);
 
   useEffect(() => {
     actionMorphScale.setValue(0.9);
@@ -980,6 +995,13 @@ function EditorScreenContent() {
     [actionMorphScale],
   );
 
+  const editorSceneOverlayAnimatedStyle = useMemo(
+    () => ({
+      opacity: editorSceneOverlayOpacity,
+    }),
+    [editorSceneOverlayOpacity],
+  );
+
   const inputDynamicStyle = useMemo(
     () => ({
       paddingBottom: composerInputHeight > MIN_INPUT_HEIGHT + 4 ? 8 : 0,
@@ -1062,30 +1084,44 @@ function EditorScreenContent() {
         </Stack.Toolbar.View>
       </Stack.Toolbar>
 
-      <KeyboardAvoidingView behavior={keyboardBehavior} style={styles.screen}>
+      <KeyboardAvoidingView
+        behavior={keyboardBehavior}
+        style={[styles.screen, shouldReusePresentedScene && styles.transparentScreen]}>
         <StatusBar style="light" />
 
-        {sceneUri ? (
+        {!shouldReusePresentedScene && sceneUri ? (
           <View style={StyleSheet.absoluteFill}>
-            <SceneFrame editorBackdropActive interactive testID="editor-scene-frame" uri={sceneUri} />
+            <SceneFrame
+              editorBackdropActive
+              hideSceneChrome={Platform.OS !== 'web'}
+              interactive
+              testID="editor-scene-frame"
+              uri={sceneUri}
+            />
           </View>
-        ) : (
+        ) : !shouldReusePresentedScene ? (
           <View pointerEvents="none" style={styles.fallbackBackdrop}>
             <View style={styles.backdropGlowPrimary} />
             <View style={styles.backdropGlowSecondary} />
           </View>
-        )}
+        ) : null}
 
-        <View pointerEvents="none" style={styles.globalBlurLayer}>
-          <GlassSurface style={styles.globalBlurSurface}>
-            <View style={styles.globalBlurFill} />
-          </GlassSurface>
-        </View>
-        <View pointerEvents="none" style={styles.sceneScrim} />
-        <View pointerEvents="none" style={styles.topShade} />
-        <View pointerEvents="none" style={styles.bottomShade} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.sceneOverlayTransitionLayer, editorSceneOverlayAnimatedStyle]}
+          testID="editor-scene-overlay-transition">
+          <View style={styles.globalBlurLayer}>
+            <GlassSurface style={styles.globalBlurSurface}>
+              <View style={styles.globalBlurFill} />
+            </GlassSurface>
+          </View>
+          <View style={styles.sceneScrim} />
+          <View style={styles.topShade} />
+          <View style={styles.bottomShade} />
+        </Animated.View>
 
         <View
+          collapsable={false}
           style={styles.overlayLayer}
           testID="editor-chat-shell">
           <View
@@ -1145,6 +1181,8 @@ function EditorScreenContent() {
                       accessibilityLabel="Open prompt history"
                       accessibilityRole="button"
                       accessible
+                      collapsable={false}
+                      importantForAccessibility="yes"
                       testID="editor-history-link">
                       {({ pressed }) => (
                         <View
@@ -1689,6 +1727,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#050608',
   },
+  transparentScreen: {
+    backgroundColor: 'transparent',
+  },
   fallbackBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#050608',
@@ -1713,6 +1754,9 @@ const styles = StyleSheet.create({
     width: 380,
   },
   globalBlurLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sceneOverlayTransitionLayer: {
     ...StyleSheet.absoluteFillObject,
   },
   globalBlurSurface: {

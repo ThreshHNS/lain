@@ -1,10 +1,11 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import GlassSurface from './glass-surface';
 
 type SceneFrameProps = {
   editorBackdropActive?: boolean;
+  hideSceneChrome?: boolean;
   interactive?: boolean;
   muted?: boolean;
   uri: string;
@@ -18,8 +19,38 @@ type SceneFrameProps = {
   statusTestID?: string;
 };
 
+const EDITOR_BACKDROP_FADE_DURATION = 220;
+const SCENE_CHROME_STYLE_ID = 'lain-scene-chrome-style';
+
+function buildSceneChromeCss(hideSceneChrome: boolean) {
+  if (!hideSceneChrome) {
+    return '';
+  }
+
+  return `
+.mode-switcher,
+.route-transition,
+#mode-chip,
+#hint,
+#hud,
+#score,
+#touch-controls,
+#dpad,
+#attack-button,
+#crosshair,
+#weapon-overlay,
+#legend,
+#stolenBanner {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+`;
+}
+
 export default function SceneFrame({
   editorBackdropActive = false,
+  hideSceneChrome = false,
   interactive = true,
   muted = false,
   uri,
@@ -32,13 +63,36 @@ export default function SceneFrame({
   statusTestID,
 }: SceneFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const backdropOpacity = useRef(new Animated.Value(editorBackdropActive ? 1 : 0)).current;
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const frameState = failed ? 'error' : loading ? 'loading' : 'ready';
+  const shellChromeHidden = hideSceneChrome || editorBackdropActive;
   const iframeStyle = StyleSheet.flatten([
     styles.iframe,
     !interactive && styles.iframeStatic,
   ]) as CSSProperties;
+  const applySceneChrome = useCallback(() => {
+    try {
+      const documentNode = iframeRef.current?.contentWindow?.document;
+      if (!documentNode) {
+        return;
+      }
+
+      let styleNode = documentNode.getElementById(SCENE_CHROME_STYLE_ID) as HTMLStyleElement | null;
+      if (!styleNode) {
+        styleNode = documentNode.createElement('style');
+        styleNode.id = SCENE_CHROME_STYLE_ID;
+        (documentNode.head || documentNode.documentElement)?.appendChild(styleNode);
+      }
+
+      styleNode.textContent = buildSceneChromeCss(shellChromeHidden);
+      documentNode.body?.setAttribute('data-shell-chrome-hidden', String(shellChromeHidden));
+      documentNode.body?.setAttribute('data-editor-backdrop-active', String(editorBackdropActive));
+    } catch {
+      // Cross-origin iframes cannot be controlled on web. Native uses WebView injection.
+    }
+  }, [editorBackdropActive, shellChromeHidden]);
   const applyMutedState = useCallback(() => {
     try {
       const documentNode = iframeRef.current?.contentWindow?.document;
@@ -67,6 +121,19 @@ export default function SceneFrame({
     applyMutedState();
   }, [applyMutedState]);
 
+  useEffect(() => {
+    applySceneChrome();
+  }, [applySceneChrome]);
+
+  useEffect(() => {
+    Animated.timing(backdropOpacity, {
+      duration: EDITOR_BACKDROP_FADE_DURATION,
+      easing: Easing.out(Easing.cubic),
+      toValue: editorBackdropActive ? 1 : 0,
+      useNativeDriver: true,
+    }).start();
+  }, [backdropOpacity, editorBackdropActive]);
+
   return (
     <View style={styles.frame} testID="scene-frame-root">
       {statusTestID ? (
@@ -92,6 +159,7 @@ export default function SceneFrame({
         onLoad={() => {
           setLoading(false);
           setFailed(false);
+          applySceneChrome();
           applyMutedState();
           onFrameLoadEnd?.();
         }}
@@ -99,7 +167,7 @@ export default function SceneFrame({
         style={iframeStyle}
         title="lain-scene"
       />
-      {editorBackdropActive ? <View pointerEvents="none" style={styles.editorBackdropMask} /> : null}
+      <Animated.View pointerEvents="none" style={[styles.editorBackdropMask, { opacity: backdropOpacity }]} />
       {failed ? (
         <View pointerEvents="box-none" style={styles.failureOverlay}>
           <GlassSurface style={styles.failureCard}>

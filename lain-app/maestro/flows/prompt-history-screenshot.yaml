@@ -3,8 +3,23 @@ tags:
   - screenshots
   - routes
 ---
+- launchApp:
+    clearState: true
 - tapOn:
-    text: Open
+    text: Cancel
+    optional: true
+- tapOn:
+    id: scene-open-awp
 - waitForAnimationToEnd:
     timeout: 5000
+- tapOn:
+    point: 77%,6%
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    point: 67%,18%
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: prompt-history-screen
 - takeScreenshot: route-prompt-history-awp

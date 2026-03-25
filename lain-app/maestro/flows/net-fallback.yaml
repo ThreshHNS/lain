@@ -2,9 +2,13 @@ appId: com.avelts.lain
 tags:
   - fallback
   - p0
+  - screenshots
 ---
 - launchApp:
     clearState: true
+- tapOn:
+    text: Cancel
+    optional: true
 - tapOn:
     id: scene-break-button
 - extendedWaitUntil:
@@ -12,9 +16,11 @@ tags:
       id: scene-preview-awp-status-error
     timeout: 10000
 - assertVisible: Scene unavailable
+- takeScreenshot: route-home-preview-awp-error
 - tapOn:
     id: scene-preview-awp-retry-button
 - extendedWaitUntil:
     visible:
       id: scene-preview-awp-status-ready
     timeout: 15000
+- takeScreenshot: route-home-preview-awp-recovered

@@ -31,6 +31,8 @@ import {
 } from '@/lib/scene-config';
 
 type ScenePreview = SceneOption & { previewUri: string };
+const FEATURED_HOME_SCENE_ORDER: Mode[] = ['tomato-grid', 'tomato-guard', 'slasher', 'awp'];
+const FEATURED_HOME_SCENE_IDS = new Set<Mode>(FEATURED_HOME_SCENE_ORDER);
 
 function isE2EDebugEnabled() {
   return process.env.EXPO_PUBLIC_E2E_DEBUG === '1';
@@ -42,6 +44,18 @@ function buildBrokenPreviewUrl(mode: Mode, version: number) {
   url.searchParams.set('preview', '1');
   url.searchParams.set('v', String(version));
   return url.toString();
+}
+
+function orderScenesForHomeFeed() {
+  const scenesById = new Map(MODE_OPTIONS.map(scene => [scene.id, scene] as const));
+
+  return [
+    ...FEATURED_HOME_SCENE_ORDER.flatMap(mode => {
+      const scene = scenesById.get(mode);
+      return scene ? [scene] : [];
+    }),
+    ...MODE_OPTIONS.filter(scene => !FEATURED_HOME_SCENE_IDS.has(scene.id)),
+  ];
 }
 
 function HomeScreenContent() {
@@ -66,7 +80,7 @@ function HomeScreenContent() {
 
   const scenes = useMemo(
     () =>
-      MODE_OPTIONS.map(scene => ({
+      orderScenesForHomeFeed().map(scene => ({
         ...scene,
         previewUri:
           brokenMode === scene.id

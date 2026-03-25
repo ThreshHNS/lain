@@ -8,6 +8,7 @@ const mockBack = jest.fn();
 const mockGetDocumentAsync = jest.fn();
 const originalPlatform = Platform.OS;
 const originalWindow = globalThis.window;
+let mockParams: Record<string, string> = { mode: 'slasher' };
 
 type MockKeyboardEvent = Pick<
   KeyboardEvent,
@@ -66,9 +67,7 @@ jest.mock('expo-router', () => {
       Screen,
       Toolbar,
     },
-    useLocalSearchParams: () => ({
-      mode: 'slasher',
-    }),
+    useLocalSearchParams: () => mockParams,
     useRouter: () => ({
       back: mockBack,
     }),
@@ -93,12 +92,16 @@ jest.mock('@/components/scene-frame', () => {
   const { Text, View } = require('react-native');
 
   return function MockSceneFrame(props: {
+    editorBackdropActive?: boolean;
+    hideSceneChrome?: boolean;
     interactive?: boolean;
     testID?: string;
     uri: string;
   }) {
     return (
       <View testID={props.testID}>
+        <Text testID="editor-scene-backdrop-active">{String(props.editorBackdropActive)}</Text>
+        <Text testID="editor-scene-hide-chrome">{String(props.hideSceneChrome)}</Text>
         <Text testID="editor-scene-uri">{props.uri}</Text>
         <Text testID="editor-scene-interactive">{String(props.interactive)}</Text>
       </View>
@@ -115,6 +118,7 @@ describe('EditorScreen', () => {
     mockBack.mockClear();
     mockGetDocumentAsync.mockReset();
     mockGetDocumentAsync.mockResolvedValue({ assets: [], canceled: true });
+    mockParams = { mode: 'slasher' };
     jest.restoreAllMocks();
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
     Object.defineProperty(globalThis, 'window', { configurable: true, value: originalWindow });
@@ -129,6 +133,9 @@ describe('EditorScreen', () => {
     render(<EditorScreen />);
 
     expect(screen.getByTestId('editor-chat-shell')).toBeTruthy();
+    expect(screen.getByTestId('editor-scene-overlay-transition')).toBeTruthy();
+    expect(screen.getByTestId('editor-scene-backdrop-active').props.children).toBe('true');
+    expect(screen.getByTestId('editor-scene-hide-chrome').props.children).toBe('true');
     expect(screen.getByTestId('editor-scene-uri').props.children).toContain('/slasher/');
     expect(screen.getByTestId('editor-scene-uri').props.children).toContain('embedded=1');
     expect(screen.getByTestId('editor-scene-interactive').props.children).toBe('true');
@@ -140,6 +147,18 @@ describe('EditorScreen', () => {
     expect(screen.getByTestId('editor-prompt-input')).toBeTruthy();
     expect(screen.getByTestId('editor-voice-button')).toBeTruthy();
     expect(screen.queryByTestId('editor-asset-preview-row')).toBeNull();
+  });
+
+  it('reuses the presented game scene when editor opens as an overlay', () => {
+    mockParams = {
+      mode: 'slasher',
+      overlayScene: '1',
+    };
+
+    render(<EditorScreen />);
+
+    expect(screen.getByTestId('editor-scene-overlay-transition')).toBeTruthy();
+    expect(screen.queryByTestId('editor-scene-frame')).toBeNull();
   });
 
   it('opens the tools sheet from the header settings action', () => {

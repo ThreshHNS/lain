@@ -1,4 +1,4 @@
-import { buildSceneUrl, resolveMode } from '@/lib/scene-config';
+import { buildSceneUrl, getSceneOption, resolveMode } from '@/lib/scene-config';
 
 describe('scene-config', () => {
   const originalTargetImage = process.env.EXPO_PUBLIC_TARGET_IMAGE_URL;
@@ -66,5 +66,12 @@ describe('scene-config', () => {
     expect(url.origin + url.pathname).toBe('https://example.com/lain/dust2/');
     expect(url.searchParams.get('v')).toBe('99');
     expect(url.searchParams.has('mode')).toBe(false);
+  });
+
+  it('returns intro metadata for scene openings', () => {
+    expect(getSceneOption('awp').intro.title).toBe('Die4Guy');
+    expect(getSceneOption('slasher').intro.artist).toBe('Xxxtentacion');
+    expect(getSceneOption('tomato-grid').intro.coverTag).toBe('GRID');
+    expect(getSceneOption('tomato-guard').intro.kicker).toContain('Hold the lane');
   });
 });

@@ -27,7 +27,7 @@ export default function RootLayout() {
             animation: Platform.OS === 'web' ? 'none' : 'fade',
             contentStyle: { backgroundColor: 'transparent' },
             headerShown: false,
-            presentation: Platform.OS === 'web' ? 'card' : 'fullScreenModal',
+            presentation: Platform.OS === 'web' ? 'card' : 'transparentModal',
           }}
         />
         <Stack.Screen

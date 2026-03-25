@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Mode, SceneOption } from '@/lib/scene-config';
 
@@ -40,6 +40,7 @@ export default function SceneFeedCard({
       style={({ pressed }) => [styles.page, { height }, pressed && styles.pagePressed]}
       testID={`scene-open-${scene.id}`}>
       <SceneFrame
+        hideSceneChrome={Platform.OS !== 'web'}
         interactive={false}
         onRetry={onRetry}
         retryTestID={retryTestID}
