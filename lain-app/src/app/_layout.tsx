@@ -12,7 +12,7 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: '#050608' },
           headerShown: false,
         }}>
-        <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen
           name="game"
           options={{
@@ -25,8 +25,30 @@ export default function RootLayout() {
           name="editor"
           options={{
             animation: Platform.OS === 'web' ? 'none' : 'fade',
+            contentStyle: { backgroundColor: 'transparent' },
+            headerShown: false,
+            presentation: Platform.OS === 'web' ? 'card' : 'transparentModal',
+          }}
+        />
+        <Stack.Screen
+          name="prompt-history"
+          options={{
+            animation: 'slide_from_right',
             headerShown: true,
-            presentation: Platform.OS === 'web' ? 'card' : 'fullScreenModal',
+            presentation: 'card',
+            title: 'Prompt history',
+          }}
+        />
+        <Stack.Screen
+          name="new-scene"
+          options={{
+            headerShown: true,
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.72, 1.0],
+            sheetCornerRadius: 32,
+            sheetExpandsWhenScrolledToEdge: false,
+            sheetGrabberVisible: true,
+            title: 'Scene lab',
           }}
         />
       </Stack>

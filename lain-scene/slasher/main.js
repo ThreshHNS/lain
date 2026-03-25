@@ -3,6 +3,11 @@ const ATTACK_CODES = new Set(['Space', 'Enter', 'NumpadEnter']);
 const embeddedScene = params.get('embedded') === '1';
 const previewScene = params.get('preview') === '1';
 const staticScene = params.get('still') === '1';
+const DEFAULT_SLASHER_MUSIC_FILE = 'Xxxtentacion - #ImSippinTeaInYoHood.mp3';
+
+function resolveSharedAudioUrl(fileName) {
+  return new URL(`../assets/audio/${encodeURIComponent(fileName)}`, window.location.href).toString();
+}
 
 function createToneObjectUrl(frequency) {
   const sampleRate = 22050;
@@ -63,7 +68,7 @@ let lastAction = 'boot';
 let lastPostedPayload = '';
 const frameSamples = [];
 
-const generatedMusicUrl = params.get('slasherMusic') || createToneObjectUrl(145);
+const generatedMusicUrl = params.get('slasherMusic') || resolveSharedAudioUrl(DEFAULT_SLASHER_MUSIC_FILE);
 const enableTouchControls =
   embeddedScene ||
   window.matchMedia('(pointer: coarse)').matches ||
@@ -864,9 +869,3 @@ window.__lainTestApi = {
 };
 
 syncDebugState();
-
-window.addEventListener('pagehide', () => {
-  if (!params.get('slasherMusic')) {
-    URL.revokeObjectURL(generatedMusicUrl);
-  }
-});

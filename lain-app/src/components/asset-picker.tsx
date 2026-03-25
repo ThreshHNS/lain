@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { AssetReference, SlotHint } from '@/types/editor';
 import { useSceneEditor } from '@/context/scene-editor-context';
+import GlassSurface from './glass-surface';
 import AssetDetailDrawer from './asset-detail-drawer';
 
 const SLOT_HINTS: SlotHint[] = ['walk', 'kill', 'seed', 'idle'];
@@ -37,21 +38,23 @@ const SAMPLE_ASSETS: AssetReference[] = [
   },
 ];
 
-export default function AssetPicker() {
-  const { assets, addAsset } = useSceneEditor();
-  const [assetSlot, setAssetSlot] = useState<SlotHint>('walk');
+type AssetPickerProps = {
+  variant?: 'solid' | 'glass';
+};
+
+export default function AssetPicker({ variant = 'solid' }: AssetPickerProps) {
+  const { assets, addAsset, setSlotHint, slotHint } = useSceneEditor();
   const [detailAsset, setDetailAsset] = useState<AssetReference | null>(null);
   const { width } = useWindowDimensions();
 
   const selectedIds = useMemo(() => new Set(assets.map(asset => asset.id)), [assets]);
   const cardWidth = Math.min(Math.max(width * 0.48, 188), 236);
-
-  return (
-    <View style={styles.container}>
+  const content = (
+    <>
       <View style={styles.header}>
         <View style={styles.titleBlock}>
           <Text style={styles.heading}>Asset browser</Text>
-          <Text style={styles.subheading}>Attach scene references without covering the preview.</Text>
+          <Text style={styles.subheading}>Attach scene references without leaving live playback.</Text>
         </View>
         <Text style={styles.counter}>{assets.length} selected</Text>
       </View>
@@ -62,10 +65,10 @@ export default function AssetPicker() {
             key={hint}
             style={[
               styles.slotChip,
-              assetSlot === hint && styles.slotChipActive,
+              slotHint === hint && styles.slotChipActive,
             ]}
-            onPress={() => setAssetSlot(hint)}>
-            <Text style={[styles.slotLabel, assetSlot === hint && styles.slotLabelActive]}>
+            onPress={() => setSlotHint(hint)}>
+            <Text style={[styles.slotLabel, slotHint === hint && styles.slotLabelActive]}>
               {hint}
             </Text>
           </Pressable>
@@ -78,7 +81,7 @@ export default function AssetPicker() {
         showsHorizontalScrollIndicator={false}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <View style={[styles.card, { width: cardWidth }]}>
+          <View style={[styles.card, variant === 'glass' && styles.cardGlass, { width: cardWidth }]}>
             <View style={styles.cardHeader}>
               <View style={styles.cardCopy}>
                 <Text numberOfLines={2} style={styles.name}>
@@ -88,7 +91,7 @@ export default function AssetPicker() {
                   {item.source} · {item.license}
                 </Text>
               </View>
-              <Text style={styles.slotTag}>{assetSlot}</Text>
+              <Text style={styles.slotTag}>{slotHint}</Text>
             </View>
             <Pressable style={styles.linkButton} onPress={() => Linking.openURL(item.url)}>
               <Text style={styles.linkText}>Open asset</Text>
@@ -98,7 +101,7 @@ export default function AssetPicker() {
                 styles.selectButton,
                 selectedIds.has(item.id) && styles.selectButtonActive,
               ]}
-              onPress={() => addAsset({ ...item, slot: assetSlot })}>
+              onPress={() => addAsset({ ...item, slot: slotHint })}>
               <Text style={[styles.selectText, selectedIds.has(item.id) && styles.selectTextActive]}>
                 {selectedIds.has(item.id) ? 'Selected' : 'Attach asset'}
               </Text>
@@ -114,8 +117,14 @@ export default function AssetPicker() {
         visible={Boolean(detailAsset)}
         onClose={() => setDetailAsset(null)}
       />
-    </View>
+    </>
   );
+
+  if (variant === 'glass') {
+    return <GlassSurface style={[styles.container, styles.containerGlass]}>{content}</GlassSurface>;
+  }
+
+  return <View style={styles.container}>{content}</View>;
 }
 
 const styles = StyleSheet.create({
@@ -127,6 +136,10 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 18,
     paddingVertical: 16,
+  },
+  containerGlass: {
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   header: {
     alignItems: 'flex-start',
@@ -191,6 +204,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#111419',
     gap: 10,
     padding: 14,
+  },
+  cardGlass: {
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(13,16,20,0.36)',
   },
   cardHeader: {
     flexDirection: 'row',

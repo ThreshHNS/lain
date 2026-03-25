@@ -3,9 +3,10 @@ tags:
   - smoke
   - p0
 ---
-- launchApp
+- launchApp:
+    clearState: true
 - tapOn:
-    id: scene-play-awp
+    id: scene-tv-play-button
 - assertVisible:
     id: game-screen
 - assertVisible:
@@ -18,7 +19,7 @@ tags:
     point: 50%,70%
 - extendedWaitUntil:
     visible:
-      id: scene-debug-audio-playing
+      id: scene-debug-audio-muted
     timeout: 10000
 - extendedWaitUntil:
     visible:

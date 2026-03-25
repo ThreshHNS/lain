@@ -10,9 +10,11 @@
     <script>
       (() => {
         const params = new URLSearchParams(window.location.search);
+        const knownModes = new Set(['awp', 'slasher', 'tomato-guard', 'tomato-grid']);
+        const requestedMode = params.get('mode');
 
-        if (params.get('mode') === 'slasher') {
-          const nextUrl = new URL('../slasher/', window.location.href);
+        if (requestedMode && requestedMode !== 'awp' && knownModes.has(requestedMode)) {
+          const nextUrl = new URL(`../${requestedMode}/`, window.location.href);
           const nextSearch = new URLSearchParams(params);
           nextSearch.delete('mode');
           nextUrl.search = nextSearch.toString();
@@ -34,13 +36,21 @@
   </head>
   <body data-scene-mode="awp" data-scene-root="../">
     <nav class="mode-switcher" aria-label="Scene mode switcher">
-      <a class="mode-link" data-target-mode="awp" href="./awp/">
+      <a class="mode-link" data-target-mode="awp" href="../awp/">
         <span class="mode-link__title">AWP</span>
         <span class="mode-link__subtitle">long range</span>
       </a>
-      <a class="mode-link" data-target-mode="slasher" href="./slasher/">
+      <a class="mode-link" data-target-mode="slasher" href="../slasher/">
         <span class="mode-link__title">Slasher</span>
         <span class="mode-link__subtitle">close range</span>
+      </a>
+      <a class="mode-link" data-target-mode="tomato-guard" href="../tomato-guard/">
+        <span class="mode-link__title">Tomato Guard</span>
+        <span class="mode-link__subtitle">field defense</span>
+      </a>
+      <a class="mode-link" data-target-mode="tomato-grid" href="../tomato-grid/">
+        <span class="mode-link__title">Tomato Grid</span>
+        <span class="mode-link__subtitle">tile timing</span>
       </a>
     </nav>
     <div class="route-transition" aria-hidden="true"></div>

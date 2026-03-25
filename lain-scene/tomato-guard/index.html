@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>lain tomato guard</title>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const knownModes = new Set(['awp', 'slasher', 'tomato-guard', 'tomato-grid']);
+        const requestedMode = params.get('mode');
+
+        if (requestedMode && requestedMode !== 'tomato-guard' && knownModes.has(requestedMode)) {
+          const nextUrl = new URL(`../${requestedMode}/`, window.location.href);
+          const nextSearch = new URLSearchParams(params);
+          nextSearch.delete('mode');
+          nextUrl.search = nextSearch.toString();
+          nextUrl.hash = window.location.hash;
+          window.location.replace(nextUrl.toString());
+          return;
+        }
+
+        if (params.has('mode')) {
+          const cleanedUrl = new URL(window.location.href);
+          params.delete('mode');
+          cleanedUrl.search = params.toString();
+          history.replaceState(null, '', cleanedUrl.toString());
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="../mode-switcher.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Arial Narrow", Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #111722;
+      }
+
+      body {
+        position: relative;
+        touch-action: none;
+      }
+
+      #renderCanvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        image-rendering: pixelated;
+        touch-action: none;
+      }
+
+      #scanlines,
+      #vignette,
+      #damage,
+      #reggae {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      #scanlines {
+        z-index: 10;
+        background: repeating-linear-gradient(
+          0deg,
+          rgba(0, 0, 0, 0.08) 0px,
+          rgba(0, 0, 0, 0.08) 1px,
+          transparent 1px,
+          transparent 3px
+        );
+      }
+
+      #vignette {
+        z-index: 11;
+        background: radial-gradient(circle at center, transparent 46%, rgba(0, 0, 0, 0.58) 100%);
+      }
+
+      #damage {
+        z-index: 12;
+        background: rgba(180, 0, 0, 0);
+      }
+
+      #reggae {
+        z-index: 13;
+        background: transparent;
+        mix-blend-mode: screen;
+        opacity: 0;
+      }
+
+      #mode-chip,
+      #hud,
+      #legend,
+      #stolenBanner {
+        position: fixed;
+        z-index: 20;
+        pointer-events: none;
+        text-transform: uppercase;
+        text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+      }
+
+      #mode-chip {
+        top: 18px;
+        left: 18px;
+        color: #d8e2ef;
+        font-size: 11px;
+        letter-spacing: 0.24em;
+      }
+
+      #hud {
+        left: 18px;
+        bottom: 18px;
+        color: #ffd4a3;
+        font-size: 10px;
+        letter-spacing: 2px;
+      }
+
+      #legend {
+        right: 18px;
+        bottom: 18px;
+        color: #a9b5c6;
+        font-size: 9px;
+        letter-spacing: 2px;
+        line-height: 1.7;
+        text-align: right;
+      }
+
+      #stolenBanner {
+        left: 50%;
+        top: 50%;
+        z-index: 24;
+        color: #f7f3e8;
+        font-size: clamp(24px, 4vw, 34px);
+        letter-spacing: 6px;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.92);
+        transition: opacity 140ms linear;
+      }
+
+      #stolenBanner.active {
+        opacity: 1;
+        animation: stolenPulse 0.9s ease-in-out infinite alternate;
+      }
+
+      @keyframes stolenPulse {
+        from {
+          transform: translate(-50%, -50%) scale(0.96);
+          filter: brightness(0.95);
+        }
+
+        to {
+          transform: translate(-50%, -50%) scale(1.02);
+          filter: brightness(1.15);
+        }
+      }
+
+      body[data-embedded='true'] .mode-switcher,
+      body[data-embedded='true'] .route-transition {
+        display: none;
+      }
+
+      body[data-preview='true'] #hud,
+      body[data-preview='true'] #legend {
+        display: none;
+      }
+    </style>
+  </head>
+  <body data-scene-mode="tomato-guard" data-scene-root="../">
+    <nav class="mode-switcher" aria-label="Scene mode switcher">
+      <a class="mode-link" data-target-mode="awp" href="../awp/">
+        <span class="mode-link__title">AWP</span>
+        <span class="mode-link__subtitle">long range</span>
+      </a>
+      <a class="mode-link" data-target-mode="slasher" href="../slasher/">
+        <span class="mode-link__title">Slasher</span>
+        <span class="mode-link__subtitle">close range</span>
+      </a>
+      <a class="mode-link" data-target-mode="tomato-guard" href="../tomato-guard/">
+        <span class="mode-link__title">Tomato Guard</span>
+        <span class="mode-link__subtitle">field defense</span>
+      </a>
+      <a class="mode-link" data-target-mode="tomato-grid" href="../tomato-grid/">
+        <span class="mode-link__title">Tomato Grid</span>
+        <span class="mode-link__subtitle">tile timing</span>
+      </a>
+    </nav>
+    <div class="route-transition" aria-hidden="true"></div>
+
+    <canvas id="renderCanvas"></canvas>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    <div id="damage"></div>
+    <div id="reggae"></div>
+    <div id="mode-chip">mode: tomato guard</div>
+    <div id="hud">STOPPED 0 // ANDREY 0 // HP 6</div>
+    <div id="legend">WASD MOVE<br>SPACE OR ENTER ATTACK<br>SHIFT OR HOLD BLOCK</div>
+    <div id="stolenBanner">Ваши помидоры украли</div>
+    <audio id="bgm" loop playsinline></audio>
+
+    <script src="../mode-switcher.js"></script>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="../engine/sprite.js"></script>
+    <script src="../engine/gestures.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>

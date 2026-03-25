@@ -11,8 +11,10 @@
       (() => {
         const params = new URLSearchParams(window.location.search);
         const requestedMode = params.get('mode');
-        const invalidModeFallback = Boolean(requestedMode) && requestedMode !== 'awp' && requestedMode !== 'slasher';
-        const nextUrl = new URL(requestedMode === 'slasher' ? './slasher/' : './awp/', window.location.href);
+        const knownModes = ['awp', 'slasher', 'tomato-guard', 'tomato-grid'];
+        const invalidModeFallback = Boolean(requestedMode) && !knownModes.includes(requestedMode);
+        const resolvedMode = knownModes.includes(requestedMode) ? requestedMode : 'awp';
+        const nextUrl = new URL(`./${resolvedMode}/`, window.location.href);
         const nextSearch = new URLSearchParams(params);
         nextSearch.delete('mode');
         if (invalidModeFallback) {
@@ -137,6 +139,14 @@
         <a href="./slasher/">
           <strong>Slasher</strong>
           <span>close range</span>
+        </a>
+        <a href="./tomato-guard/">
+          <strong>Tomato Guard</strong>
+          <span>field defense</span>
+        </a>
+        <a href="./tomato-grid/">
+          <strong>Tomato Grid</strong>
+          <span>tile timing</span>
         </a>
       </div>
     </main>

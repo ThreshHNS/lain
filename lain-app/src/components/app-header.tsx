@@ -22,7 +22,7 @@ export default function AppHeader({
   onVoiceCaptured,
 }: AppHeaderProps) {
   const { slotHint, setSlotHint, history, collaborators, addHistory } = useSceneEditor();
-  const { status, audioUri, startRecording, stopRecording, reset } = useVoiceRecorder();
+  const { status, startRecording, stopRecording, reset } = useVoiceRecorder();
 
   const buttonLabel = useMemo(() => {
     if (status === 'recording') {
@@ -54,8 +54,8 @@ export default function AppHeader({
   }, [activeSceneLabel, sceneCount]);
 
   const handleVoiceEnd = async () => {
-    await stopRecording();
-    if (!audioUri) {
+    const nextAudioUri = await stopRecording();
+    if (!nextAudioUri) {
       return;
     }
 
@@ -64,9 +64,9 @@ export default function AppHeader({
       timestamp: new Date().toISOString(),
       slot: slotHint,
       type: 'voice',
-      audioUri,
+      audioUri: nextAudioUri,
     });
-    onVoiceCaptured?.(audioUri);
+    onVoiceCaptured?.(nextAudioUri);
     reset();
   };
 

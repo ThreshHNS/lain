@@ -23,6 +23,8 @@ type MessageResponse = {
   };
 };
 
+type PromptMessageSource = 'asset' | 'photo' | 'text' | 'voice';
+
 export async function createPromptSession(title: string, creatorId: string) {
   const response = await fetch(`${API_BASE_URL}/prompt-sessions`, {
     method: 'POST',
@@ -33,11 +35,16 @@ export async function createPromptSession(title: string, creatorId: string) {
   return payload.session;
 }
 
-export async function appendPromptMessage(sessionId: string, text: string, slot?: string | null) {
+export async function appendPromptMessage(
+  sessionId: string,
+  text: string,
+  slot?: string | null,
+  source: PromptMessageSource = 'voice',
+) {
   const response = await fetch(`${API_BASE_URL}/prompt-sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, slot, source: 'voice' }),
+    body: JSON.stringify({ text, slot, source }),
   });
   const payload: MessageResponse = await response.json();
   return payload.message;

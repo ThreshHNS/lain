@@ -3,16 +3,15 @@ tags:
   - smoke
   - p0
 ---
-- launchApp
+- launchApp:
+    clearState: true
 - assertVisible:
     id: scene-feed-screen
 - assertVisible:
-    id: scene-card-awp
+    id: scene-active-mode-awp
 - assertVisible:
-    id: scene-play-awp
-- scrollUntilVisible:
-    direction: DOWN
-    element:
-      id: scene-card-slasher
+    id: scene-tv-play-button
+- tapOn:
+    id: scene-tv-next-button
 - assertVisible:
-    id: scene-play-slasher
+    id: scene-active-mode-slasher

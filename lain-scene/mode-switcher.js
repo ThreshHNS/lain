@@ -1,14 +1,11 @@
 (function () {
   const body = document.body;
-  const currentMode = body.dataset.sceneMode === 'slasher' ? 'slasher' : 'awp';
+  const currentMode = body.dataset.sceneMode || 'awp';
   const sceneRoot = body.dataset.sceneRoot || '../';
   const links = Array.from(document.querySelectorAll('.mode-link[data-target-mode]'));
 
   function buildTargetUrl(targetMode) {
-    const nextUrl = new URL(
-      `${sceneRoot}${targetMode === 'slasher' ? 'slasher/' : 'awp/'}`,
-      window.location.href,
-    );
+    const nextUrl = new URL(`${sceneRoot}${targetMode}/`, window.location.href);
     const nextSearch = new URLSearchParams(window.location.search);
     nextSearch.delete('mode');
     nextUrl.search = nextSearch.toString();
@@ -17,7 +14,10 @@
   }
 
   links.forEach((link) => {
-    const targetMode = link.dataset.targetMode === 'slasher' ? 'slasher' : 'awp';
+    const targetMode = link.dataset.targetMode;
+    if (!targetMode) {
+      return;
+    }
     const targetUrl = buildTargetUrl(targetMode);
 
     link.href = targetUrl.toString();

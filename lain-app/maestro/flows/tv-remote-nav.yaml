@@ -1,10 +1,10 @@
 appId: com.avelts.lain
 tags:
-  - smoke
   - tv
   - p0
 ---
-- launchApp
+- launchApp:
+    clearState: true
 - assertVisible:
     id: scene-active-mode-awp
 - pressKey: Remote Dpad Right

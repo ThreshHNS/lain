@@ -1,8 +1,13 @@
 import { Alert, Pressable, StyleSheet, Text } from 'react-native';
 import { useSceneEditor } from '@/context/scene-editor-context';
 import { exportDraft } from '@/lib/api/scene-draft';
+import GlassSurface from './glass-surface';
 
-export default function ExportBundleButton() {
+type ExportBundleButtonProps = {
+  variant?: 'solid' | 'glass';
+};
+
+export default function ExportBundleButton({ variant = 'solid' }: ExportBundleButtonProps) {
   const { assets, sessionId } = useSceneEditor();
 
   const handleExport = async () => {
@@ -20,9 +25,19 @@ export default function ExportBundleButton() {
   };
 
   return (
-    <Pressable style={styles.button} onPress={handleExport}>
-      <Text style={styles.label}>Export manifest</Text>
-      <Text style={styles.caption}>Codex bundle · {assets.length} assets</Text>
+    <Pressable onPress={handleExport}>
+      {({ pressed }) => (
+        <GlassSurface
+          interactive
+          style={[
+            styles.button,
+            variant === 'glass' && styles.buttonGlass,
+            pressed && styles.buttonPressed,
+          ]}>
+          <Text style={styles.label}>Export manifest</Text>
+          <Text style={styles.caption}>Codex bundle · {assets.length} assets</Text>
+        </GlassSurface>
+      )}
     </Pressable>
   );
 }
@@ -36,6 +51,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#11161b',
     gap: 4,
     paddingVertical: 14,
+  },
+  buttonGlass: {
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  buttonPressed: {
+    opacity: 0.82,
   },
   label: {
     color: '#e9efe9',
