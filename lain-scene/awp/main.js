@@ -9,9 +9,15 @@ const DIRECTION_CODES = {
   ArrowLeft: 'left',
   ArrowRight: 'right',
 };
+const DEFAULT_AWP_MUSIC_FILE = 'Playboi Carti - Die4Guy.mp3';
+const DEFAULT_SLASHER_MUSIC_FILE = 'Xxxtentacion - #ImSippinTeaInYoHood.mp3';
 
 function resolveMode(input) {
   return ALLOWED_MODES.has(input) ? input : 'awp';
+}
+
+function resolveSharedAudioUrl(fileName) {
+  return new URL(`../assets/audio/${encodeURIComponent(fileName)}`, window.location.href).toString();
 }
 
 function createToneObjectUrl(frequency) {
@@ -63,8 +69,8 @@ const embeddedScene = params.get('embedded') === '1';
 const previewScene = params.get('preview') === '1';
 const staticScene = params.get('still') === '1';
 const targetImage = params.get('targetImage') || FALLBACK_TARGET_IMAGE;
-const awpMusic = params.get('awpMusic') || createToneObjectUrl(220);
-const slasherMusic = params.get('slasherMusic') || createToneObjectUrl(145);
+const awpMusic = params.get('awpMusic') || resolveSharedAudioUrl(DEFAULT_AWP_MUSIC_FILE);
+const slasherMusic = params.get('slasherMusic') || resolveSharedAudioUrl(DEFAULT_SLASHER_MUSIC_FILE);
 
 const body = document.body;
 const modeChip = document.getElementById('mode-chip');

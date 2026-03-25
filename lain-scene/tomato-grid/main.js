@@ -7,6 +7,11 @@ const touchScene =
   embeddedScene ||
   (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
   'ontouchstart' in window;
+const DEFAULT_TOMATO_GRID_MUSIC_FILE = 'C4FF31N3 - lain - 01 lain.mp3';
+
+function resolveSharedAudioUrl(fileName) {
+  return new URL(`../assets/audio/${encodeURIComponent(fileName)}`, window.location.href).toString();
+}
 
 function createToneObjectUrl(frequency) {
   const sampleRate = 22050;
@@ -141,7 +146,7 @@ function recordFrame(deltaMs) {
 
 bgm.loop = true;
 bgm.volume = 0.18;
-bgm.src = params.get('tomatoGridMusic') || createToneObjectUrl(182);
+bgm.src = params.get('tomatoGridMusic') || resolveSharedAudioUrl(DEFAULT_TOMATO_GRID_MUSIC_FILE);
 bgm.addEventListener('canplaythrough', () => {
   audioState = 'ready';
   syncDebugState();

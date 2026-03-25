@@ -8,6 +8,11 @@ const touchScene =
   embeddedScene ||
   (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
   'ontouchstart' in window;
+const DEFAULT_TOMATO_GUARD_MUSIC_FILE = '$uicideboy$ - 1000 Blunts.mp3';
+
+function resolveSharedAudioUrl(fileName) {
+  return new URL(`../assets/audio/${encodeURIComponent(fileName)}`, window.location.href).toString();
+}
 
 function createToneObjectUrl(frequency) {
   const sampleRate = 22050;
@@ -134,7 +139,7 @@ function recordFrame(deltaMs) {
 
 bgm.loop = true;
 bgm.volume = 0.18;
-bgm.src = params.get('tomatoGuardMusic') || createToneObjectUrl(166);
+bgm.src = params.get('tomatoGuardMusic') || resolveSharedAudioUrl(DEFAULT_TOMATO_GUARD_MUSIC_FILE);
 bgm.addEventListener('canplaythrough', () => {
   audioState = 'ready';
   syncDebugState();
