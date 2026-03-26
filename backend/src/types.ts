@@ -2,6 +2,16 @@ import { z } from 'zod';
 
 export const slotHintSchema = z.enum(['walk', 'kill', 'seed', 'idle']);
 
+export const promptMessageSourceSchema = z.enum([
+  'asset',
+  'codex',
+  'photo',
+  'system',
+  'text',
+  'transcript',
+  'voice',
+]);
+
 export const promptSessionSchema = z.object({
   id: z.string().uuid(),
   title: z.string().min(1),
@@ -16,7 +26,7 @@ export const promptMessageSchema = z.object({
   sessionId: z.string().uuid(),
   role: z.enum(['system', 'user', 'assistant', 'tool']),
   text: z.string(),
-  source: z.enum(['text', 'voice', 'transcript', 'codex', 'system']),
+  source: promptMessageSourceSchema,
   slot: slotHintSchema.nullable(),
   createdAt: z.string().datetime(),
 });
