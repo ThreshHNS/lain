@@ -65,6 +65,14 @@ export default function EditorCollaborationMenu({ feed }: EditorCollaborationMen
   const [open, setOpen] = useState(false);
   const eventOpacity = useRef(new Animated.Value(1)).current;
   const latestEventId = feed.latestEvent.id;
+  const triggerLabel =
+    feed.activeCollaborators.length > 1
+      ? `${feed.activeCollaborators.length} active`
+      : 'local';
+  const syncMeta =
+    feed.socket.latencyMs == null
+      ? feed.socket.channel
+      : `${feed.socket.channel} · ${feed.socket.latencyMs}ms`;
 
   useEffect(() => {
     eventOpacity.setValue(0.35);
@@ -78,7 +86,7 @@ export default function EditorCollaborationMenu({ feed }: EditorCollaborationMen
   return (
     <>
       <Pressable
-        accessibilityLabel="open collaborators menu"
+        accessibilityLabel="open editor activity menu"
         accessibilityRole="button"
         accessible
         onPress={() => setOpen(true)}
@@ -87,7 +95,7 @@ export default function EditorCollaborationMenu({ feed }: EditorCollaborationMen
           <GlassSurface style={[styles.trigger, pressed && styles.pressed]}>
             <PresencePulse color={palette.accent} />
             <Text style={[styles.triggerLabel, { color: palette.strongText }]}>
-              {feed.activeCollaborators.length} live
+              {triggerLabel}
             </Text>
           </GlassSurface>
         )}
@@ -103,8 +111,8 @@ export default function EditorCollaborationMenu({ feed }: EditorCollaborationMen
           <GlassSurface style={[styles.panel, { backgroundColor: palette.card, borderColor: palette.border }]}>
             <View style={styles.panelHeader}>
               <View style={styles.panelCopy}>
-                <Text style={[styles.panelEyebrow, { color: palette.mutedText }]}>Collaboration</Text>
-                <Text style={[styles.panelTitle, { color: palette.strongText }]}>Scene presence</Text>
+                <Text style={[styles.panelEyebrow, { color: palette.mutedText }]}>Activity</Text>
+                <Text style={[styles.panelTitle, { color: palette.strongText }]}>Editor session</Text>
               </View>
               <Pressable onPress={() => setOpen(false)} style={styles.closeButton}>
                 <SymbolView
@@ -124,13 +132,13 @@ export default function EditorCollaborationMenu({ feed }: EditorCollaborationMen
                 </Text>
               </View>
               <Text selectable style={[styles.socketMeta, { color: palette.mutedText }]}>
-                {feed.socket.channel} · {feed.socket.latencyMs}ms
+                {syncMeta}
               </Text>
             </View>
 
             <Animated.View style={{ opacity: eventOpacity }}>
               <GlassSurface style={[styles.eventCard, { backgroundColor: palette.chip }]}>
-                <Text style={[styles.eventLabel, { color: palette.mutedText }]}>Latest live change</Text>
+                <Text style={[styles.eventLabel, { color: palette.mutedText }]}>Latest activity</Text>
                 <Text selectable style={[styles.eventText, { color: palette.strongText }]}>
                   {feed.latestEvent.label}
                 </Text>
@@ -155,7 +163,9 @@ export default function EditorCollaborationMenu({ feed }: EditorCollaborationMen
                     </Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: palette.accentMuted }]}>
-                    <Text style={[styles.statusBadgeText, { color: palette.strongText }]}>live</Text>
+                    <Text style={[styles.statusBadgeText, { color: palette.strongText }]}>
+                      {collaborator.id === 'local-creator' ? 'local' : 'active'}
+                    </Text>
                   </View>
                 </View>
               ))}

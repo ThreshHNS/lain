@@ -6,9 +6,11 @@ import GameScreen from '@/app/game';
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockLocationAssign = jest.fn();
+const mockUpsertSceneRuntime = jest.fn();
 const originalPlatform = Platform.OS;
 const originalDocument = globalThis.document;
 const originalWindow = globalThis.window;
+let mockIsFocused = true;
 
 type MockKeyboardEvent = Pick<
   KeyboardEvent,
@@ -74,7 +76,20 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useIsFocused: () => true,
+  useIsFocused: () => mockIsFocused,
+}));
+
+jest.mock('@/context/scene-runtime-context', () => ({
+  SceneRuntimeProvider: ({ children }: { children?: unknown }) => children ?? null,
+  useSceneRuntime: () => ({
+    clearSceneRuntime: jest.fn(),
+    runtime: {
+      frameStatus: 'idle',
+      lastState: null,
+      lastUpdatedAt: null,
+    },
+    upsertSceneRuntime: mockUpsertSceneRuntime,
+  }),
 }));
 
 jest.mock('@/components/scene-frame', () => {
@@ -124,6 +139,8 @@ describe('GameScreen', () => {
     mockBack.mockClear();
     mockPush.mockClear();
     mockLocationAssign.mockClear();
+    mockUpsertSceneRuntime.mockClear();
+    mockIsFocused = true;
     jest.restoreAllMocks();
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });
     Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
@@ -165,6 +182,9 @@ describe('GameScreen', () => {
     fireEvent.press(screen.getByTestId('game-edit-button'));
 
     expect(screen.queryByTestId('game-scene-opening-intro')).toBeNull();
+    expect(screen.queryByTestId('game-mute-button')).toBeNull();
+    expect(screen.queryByTestId('game-edit-button')).toBeNull();
+    expect(screen.queryByTestId('game-close-button')).toBeNull();
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/editor',
       params: {
@@ -172,6 +192,16 @@ describe('GameScreen', () => {
         overlayScene: '1',
       },
     });
+  });
+
+  it('hides scene controls while the game screen is not focused', () => {
+    mockIsFocused = false;
+
+    render(<GameScreen />);
+
+    expect(screen.queryByTestId('game-mute-button')).toBeNull();
+    expect(screen.queryByTestId('game-edit-button')).toBeNull();
+    expect(screen.queryByTestId('game-close-button')).toBeNull();
   });
 
   it('handles web keyboard shortcuts for shell actions outside the iframe', () => {

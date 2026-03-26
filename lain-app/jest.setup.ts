@@ -2,6 +2,14 @@ jest.mock('expo-status-bar', () => ({
   StatusBar: () => null,
 }));
 
+jest.mock('@ronradtke/react-native-markdown-display', () => {
+  const React = require('react');
+  const { Text, View } = require('react-native');
+
+  return ({ children, testID }: { children?: import('react').ReactNode; testID?: string }) =>
+    React.createElement(View, { testID }, React.createElement(Text, null, children));
+});
+
 jest.mock('expo-glass-effect', () => {
   return {
     GlassView: ({ children, style }: { children?: unknown; style?: unknown }) => {
@@ -14,7 +22,25 @@ jest.mock('expo-glass-effect', () => {
 });
 
 jest.mock('expo-audio', () => {
-  const React = require('react');
+  const React = require('react') as typeof import('react');
+
+  type MockRecorder = {
+    currentTime: number;
+    getAvailableInputs: ReturnType<typeof jest.fn>;
+    getCurrentInput: ReturnType<typeof jest.fn>;
+    getStatus: ReturnType<typeof jest.fn>;
+    id: string;
+    isRecording?: boolean;
+    pause: ReturnType<typeof jest.fn>;
+    prepareToRecordAsync: ReturnType<typeof jest.fn>;
+    record: ReturnType<typeof jest.fn>;
+    recordForDuration: ReturnType<typeof jest.fn>;
+    release: ReturnType<typeof jest.fn>;
+    setInput: ReturnType<typeof jest.fn>;
+    startRecordingAtTime: ReturnType<typeof jest.fn>;
+    stop: ReturnType<typeof jest.fn>;
+    uri?: string | null;
+  };
 
   function createReleasedRecorderError() {
     return new Error(
@@ -22,10 +48,11 @@ jest.mock('expo-audio', () => {
     );
   }
 
-  function createMockRecorder() {
+  function createMockRecorder(): MockRecorder {
     let isRecording = false;
     let uri: string | null = null;
     let isReleased = false;
+    const recorderId = 'mock-recorder';
     const assertAvailable = () => {
       if (isReleased) {
         throw createReleasedRecorderError();
@@ -51,13 +78,13 @@ jest.mock('expo-audio', () => {
         return {
           canRecord: true,
           durationMillis: 0,
-          id: recorder.id,
+          id: recorderId,
           isRecording,
           mediaServicesDidReset: false,
           url: uri,
         };
       }),
-      id: 'mock-recorder',
+      id: recorderId,
       pause: jest.fn(() => {
         assertAvailable();
       }),
@@ -89,7 +116,9 @@ jest.mock('expo-audio', () => {
         uri = 'file://mock-voice';
         return Promise.resolve();
       }),
-    };
+      isRecording: false,
+      uri: null,
+    } as MockRecorder;
 
     Object.defineProperties(recorder, {
       isRecording: {

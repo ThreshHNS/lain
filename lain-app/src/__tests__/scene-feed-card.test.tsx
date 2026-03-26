@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
 import SceneFeedCard from '@/components/scene-feed-card';
+import { getSceneOption } from '@/lib/scene-config';
 
 const originalPlatform = Platform.OS;
 
@@ -26,11 +27,7 @@ jest.mock('@/components/scene-frame', () => {
 });
 
 describe('SceneFeedCard', () => {
-  const scene = {
-    description: 'long range',
-    id: 'awp',
-    label: 'AWP',
-  };
+  const scene = getSceneOption('awp');
 
   beforeEach(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalPlatform });

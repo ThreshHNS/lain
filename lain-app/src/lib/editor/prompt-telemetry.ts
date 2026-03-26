@@ -39,7 +39,7 @@ function usage(input: number, output: number, cached = 0): TokenUsage {
   };
 }
 
-const PROMPT_TELEMETRY: Record<Mode, ScenePromptTelemetry> = {
+const PROMPT_TELEMETRY: Partial<Record<Mode, ScenePromptTelemetry>> = {
   awp: {
     activeRun: {
       agent: 'Scene Director',
@@ -201,8 +201,28 @@ const PROMPT_TELEMETRY: Record<Mode, ScenePromptTelemetry> = {
   },
 };
 
+function createFallbackPromptTelemetry(mode: Mode): ScenePromptTelemetry {
+  return {
+    activeRun: {
+      agent: 'Prompt Router',
+      createdAt: '2026-03-23T18:30:00.000Z',
+      id: `${mode}-run-fallback`,
+      prompt: 'Prompt telemetry mock is not seeded for this scene yet.',
+      responsePreview: 'Waiting for real prompt traces or a scene-specific mock payload.',
+      serviceLabels: [],
+      slot: 'idle',
+      status: 'queued',
+      title: 'No telemetry yet',
+      usage: usage(0, 0),
+    },
+    queueDepth: 0,
+    recentRuns: [],
+    sessionUsage: usage(0, 0),
+  };
+}
+
 export function getPromptTelemetryMock(mode: Mode) {
-  return PROMPT_TELEMETRY[mode];
+  return PROMPT_TELEMETRY[mode] ?? createFallbackPromptTelemetry(mode);
 }
 
 export function formatTokenCount(value: number) {

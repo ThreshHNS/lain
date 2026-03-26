@@ -1,0 +1,50 @@
+appId: com.avelts.lain
+tags:
+  - smoke
+  - editor
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    text: Cancel
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 3000
+- tapOn:
+    id: editor-close-button
+    optional: true
+- tapOn:
+    id: game-close-button
+    optional: true
+- waitForAnimationToEnd:
+    timeout: 3000
+- assertVisible:
+    id: scene-feed-screen
+- assertVisible:
+    id: scene-open-awp
+- tapOn:
+    id: scene-open-awp
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: smoke-editor-settings-awp-shell-check
+- tapOn:
+    point: 77%,6%
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: editor-chat-shell
+- assertVisible:
+    id: editor-settings-button
+- tapOn:
+    id: editor-settings-button
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: editor-settings-done-button
+- takeScreenshot: smoke-editor-settings-sheet
+- tapOn:
+    id: editor-settings-done-button
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: editor-chat-shell

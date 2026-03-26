@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GlassSurface from '@/components/glass-surface';
 import SceneFrame from '@/components/scene-frame';
 import SceneOpeningIntro from '@/components/scene-opening-intro';
+import { useSceneRuntime } from '@/context/scene-runtime-context';
 import { useWebKeyboardControls } from '@/hooks/use-web-keyboard-controls';
 import {
   buildSceneUrl,
@@ -17,16 +18,8 @@ import {
   Mode,
   resolveMode,
 } from '@/lib/scene-config';
+import { parseSceneBridgeMessage, type SceneBridgeState } from '@/lib/runtime/scene-bridge';
 import { navigateToWebAppHome, navigateWithinWebApp } from '@/lib/web-navigation';
-
-type SceneBridgeState = {
-  assetState?: string;
-  audioState?: string;
-  invalidModeFallback?: boolean;
-  lastAction?: string;
-  mode?: string;
-  targetState?: string;
-};
 
 const E2E_DEBUG_ENABLED = process.env.EXPO_PUBLIC_E2E_DEBUG === '1';
 const SCENE_REVEAL_DURATION = 1120;
@@ -39,18 +32,6 @@ function sanitizeDebugToken(value: unknown, fallback: string) {
     .replace(/^-+|-+$/g, '');
 
   return normalized || fallback;
-}
-
-function parseSceneBridgeMessage(message: string): SceneBridgeState | null {
-  try {
-    const payload = JSON.parse(message) as { state?: SceneBridgeState; type?: string };
-    if (payload.type !== 'scene-state' || !payload.state) {
-      return null;
-    }
-    return payload.state;
-  } catch {
-    return null;
-  }
 }
 
 function buildDebugTokens(mode: Mode, sceneState: SceneBridgeState | null) {
@@ -75,6 +56,7 @@ export default function GameScreen() {
   const [sceneState, setSceneState] = useState<SceneBridgeState | null>(null);
   const sceneReveal = useRef(new Animated.Value(0)).current;
   const mode = resolveMode(Array.isArray(params.mode) ? params.mode[0] : params.mode);
+  const { upsertSceneRuntime } = useSceneRuntime(mode);
   const scene = getSceneOption(mode);
   const uri = useMemo(
     () =>
@@ -88,8 +70,19 @@ export default function GameScreen() {
     const nextState = parseSceneBridgeMessage(message);
     if (nextState) {
       setSceneState(nextState);
+      upsertSceneRuntime(mode, {
+        frameStatus: 'ready',
+        lastState: nextState,
+        lastUpdatedAt: new Date().toISOString(),
+      });
     }
-  }, []);
+  }, [mode, upsertSceneRuntime]);
+  useEffect(() => {
+    upsertSceneRuntime(mode, {
+      frameStatus: 'loading',
+      lastUpdatedAt: new Date().toISOString(),
+    });
+  }, [mode, upsertSceneRuntime]);
   useEffect(() => {
     if (isFocused) {
       setIsEditorTransitionActive(false);
@@ -176,6 +169,7 @@ export default function GameScreen() {
       outputRange: [0.46, 0.22, 0],
     }),
   };
+  const showOverlayActions = isFocused && !isEditorTransitionActive;
 
   return (
     <>
@@ -193,6 +187,24 @@ export default function GameScreen() {
             hideSceneChrome={Platform.OS !== 'web'}
             interactive
             muted={isMuted}
+            onFrameError={() => {
+              upsertSceneRuntime(mode, {
+                frameStatus: 'error',
+                lastUpdatedAt: new Date().toISOString(),
+              });
+            }}
+            onFrameLoadEnd={() => {
+              upsertSceneRuntime(mode, {
+                frameStatus: 'ready',
+                lastUpdatedAt: new Date().toISOString(),
+              });
+            }}
+            onFrameLoadStart={() => {
+              upsertSceneRuntime(mode, {
+                frameStatus: 'loading',
+                lastUpdatedAt: new Date().toISOString(),
+              });
+            }}
             onFrameMessage={handleFrameMessage}
             testID="scene-game-frame"
             uri={uri}
@@ -211,77 +223,79 @@ export default function GameScreen() {
           <SceneOpeningIntro bottomInset={insets.bottom} scene={scene} topInset={insets.top} />
         ) : null}
 
-        <View
-          collapsable={false}
-          pointerEvents="box-none"
-          style={[styles.overlayActions, { top: insets.top + 12 }]}>
-          <Pressable
-            accessibilityLabel={isMuted ? 'unmute scene audio' : 'mute scene audio'}
-            accessibilityRole="button"
-            accessible
+        {showOverlayActions ? (
+          <View
             collapsable={false}
-            hitSlop={8}
-            importantForAccessibility="yes"
-            onPress={handleToggleMuted}
-            testID="game-mute-button">
-            {({ pressed }) => (
-              <GlassSurface interactive style={[styles.overlayButton, pressed && styles.overlayButtonPressed]}>
-                <SymbolView
-                  name={
-                    isMuted
-                      ? { ios: 'speaker.slash.fill', android: 'volume_off', web: 'volume_off' }
-                      : { ios: 'speaker.wave.2.fill', android: 'volume_up', web: 'volume_up' }
-                  }
-                  size={18}
-                  tintColor="#fff7f1"
-                  weight="semibold"
-                />
-              </GlassSurface>
-            )}
-          </Pressable>
+            pointerEvents="box-none"
+            style={[styles.overlayActions, { top: insets.top + 12 }]}>
+            <Pressable
+              accessibilityLabel={isMuted ? 'unmute scene audio' : 'mute scene audio'}
+              accessibilityRole="button"
+              accessible
+              collapsable={false}
+              hitSlop={8}
+              importantForAccessibility="yes"
+              onPress={handleToggleMuted}
+              testID="game-mute-button">
+              {({ pressed }) => (
+                <GlassSurface interactive style={[styles.overlayButton, pressed && styles.overlayButtonPressed]}>
+                  <SymbolView
+                    name={
+                      isMuted
+                        ? { ios: 'speaker.slash.fill', android: 'volume_off', web: 'volume_off' }
+                        : { ios: 'speaker.wave.2.fill', android: 'volume_up', web: 'volume_up' }
+                    }
+                    size={18}
+                    tintColor="#fff7f1"
+                    weight="semibold"
+                  />
+                </GlassSurface>
+              )}
+            </Pressable>
 
-          <Pressable
-            accessibilityLabel="edit scene"
-            accessibilityRole="button"
-            accessible
-            collapsable={false}
-            hitSlop={8}
-            importantForAccessibility="yes"
-            onPress={handleOpenEditor}
-            testID="game-edit-button">
-            {({ pressed }) => (
-              <GlassSurface interactive style={[styles.overlayButton, pressed && styles.overlayButtonPressed]}>
-                <SymbolView
-                  name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
-                  size={16}
-                  tintColor="#fff7f1"
-                  weight="semibold"
-                />
-              </GlassSurface>
-            )}
-          </Pressable>
+            <Pressable
+              accessibilityLabel="edit scene"
+              accessibilityRole="button"
+              accessible
+              collapsable={false}
+              hitSlop={8}
+              importantForAccessibility="yes"
+              onPress={handleOpenEditor}
+              testID="game-edit-button">
+              {({ pressed }) => (
+                <GlassSurface interactive style={[styles.overlayButton, pressed && styles.overlayButtonPressed]}>
+                  <SymbolView
+                    name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                    size={16}
+                    tintColor="#fff7f1"
+                    weight="semibold"
+                  />
+                </GlassSurface>
+              )}
+            </Pressable>
 
-          <Pressable
-            accessibilityLabel="close game"
-            accessibilityRole="button"
-            accessible
-            collapsable={false}
-            hitSlop={8}
-            importantForAccessibility="yes"
-            onPress={handleClose}
-            testID="game-close-button">
-            {({ pressed }) => (
-              <GlassSurface interactive style={[styles.overlayButton, pressed && styles.overlayButtonPressed]}>
-                <SymbolView
-                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
-                  size={17}
-                  tintColor="#fff7f1"
-                  weight="bold"
-                />
-              </GlassSurface>
-            )}
-          </Pressable>
-        </View>
+            <Pressable
+              accessibilityLabel="close game"
+              accessibilityRole="button"
+              accessible
+              collapsable={false}
+              hitSlop={8}
+              importantForAccessibility="yes"
+              onPress={handleClose}
+              testID="game-close-button">
+              {({ pressed }) => (
+                <GlassSurface interactive style={[styles.overlayButton, pressed && styles.overlayButtonPressed]}>
+                  <SymbolView
+                    name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                    size={17}
+                    tintColor="#fff7f1"
+                    weight="bold"
+                  />
+                </GlassSurface>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
 
         {E2E_DEBUG_ENABLED && isFocused ? (
           <View pointerEvents="none" style={styles.debugRail}>

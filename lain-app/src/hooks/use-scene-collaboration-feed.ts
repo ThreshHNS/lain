@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import type { Mode } from '@/lib/scene-config';
 import type { ActiveUser } from '@/types/editor';
@@ -23,143 +23,138 @@ export type SceneCollaborationFeed = {
   latestEvent: SceneCollaborationEvent;
   socket: {
     channel: string;
-    latencyMs: number;
+    latencyMs: number | null;
     stateLabel: string;
   };
 };
 
-type CollaborationProfile = {
-  currentAction: string;
-  roleLabel: string;
-  status: SceneCollaboratorStatus;
+type SceneCollaborationFeedOptions = {
+  latestActivityAt?: string | null;
+  latestActivityLabel?: string | null;
+  pendingHistoryCount?: number;
+  runtimeSummary?: string | null;
+  sessionStatus?: 'offline' | 'ready' | 'syncing';
 };
 
-const COLLABORATOR_PROFILES: Record<string, CollaborationProfile> = {
-  'local-creator': {
-    currentAction: 'Composing the next prompt',
-    roleLabel: 'You',
-    status: 'editing',
-  },
-  u2: {
-    currentAction: 'Reviewing atmosphere refs',
-    roleLabel: 'Asset Librarian',
-    status: 'reviewing',
-  },
-  u3: {
-    currentAction: 'Routing the current scene prompt',
-    roleLabel: 'Codex',
-    status: 'watching',
-  },
-};
+function formatRelativeTime(timestamp?: string | null) {
+  if (!timestamp) {
+    return 'just now';
+  }
 
-const SCENE_EVENTS: Record<Mode, SceneCollaborationEvent[]> = {
-  awp: [
-    {
-      actorId: 'u3',
-      id: 'awp-event-1',
-      label: 'Codex updated the target timing draft',
-      relativeTimeLabel: 'just now',
-    },
-    {
-      actorId: 'u2',
-      id: 'awp-event-2',
-      label: 'Ava renamed two muzzle flash refs',
-      relativeTimeLabel: '20s ago',
-    },
-  ],
-  slasher: [
-    {
-      actorId: 'u3',
-      id: 'slasher-event-1',
-      label: 'Codex synced a new pursuit beat over websocket',
-      relativeTimeLabel: 'just now',
-    },
-    {
-      actorId: 'u2',
-      id: 'slasher-event-2',
-      label: 'Ava updated genre tags for the latest horror refs',
-      relativeTimeLabel: '34s ago',
-    },
-    {
-      actorId: 'u3',
-      id: 'slasher-event-3',
-      label: 'Codex re-routed image2sprite after a phone upload',
-      relativeTimeLabel: '1m ago',
-    },
-  ],
-  'tomato-guard': [
-    {
-      actorId: 'u2',
-      id: 'guard-event-1',
-      label: 'Ava refreshed lane-defense prop names',
-      relativeTimeLabel: 'just now',
-    },
-    {
-      actorId: 'u3',
-      id: 'guard-event-2',
-      label: 'Codex staged a hit-feedback sprite pass',
-      relativeTimeLabel: '46s ago',
-    },
-  ],
-  'tomato-grid': [
-    {
-      actorId: 'u3',
-      id: 'grid-event-1',
-      label: 'Codex synced a new timing note from the prompt queue',
-      relativeTimeLabel: 'just now',
-    },
-    {
-      actorId: 'u2',
-      id: 'grid-event-2',
-      label: 'Ava regrouped tile refs by readability',
-      relativeTimeLabel: '52s ago',
-    },
-  ],
-};
+  const elapsedMs = Date.now() - new Date(timestamp).getTime();
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 15_000) {
+    return 'just now';
+  }
 
-export function useSceneCollaborationFeed(mode: Mode, collaborators: ActiveUser[]) {
-  const [eventIndex, setEventIndex] = useState(0);
-  const events = SCENE_EVENTS[mode];
+  const elapsedMinutes = Math.round(elapsedMs / 60_000);
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m ago`;
+  }
 
-  useEffect(() => {
-    setEventIndex(0);
-  }, [mode]);
+  const elapsedHours = Math.round(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours}h ago`;
+  }
 
-  useEffect(() => {
-    if (events.length <= 1) {
-      return;
-    }
+  const elapsedDays = Math.round(elapsedHours / 24);
+  return `${elapsedDays}d ago`;
+}
 
-    const intervalId = setInterval(() => {
-      setEventIndex(currentIndex => (currentIndex + 1) % events.length);
-    }, 4200);
+function getSyncStateLabel(sessionStatus: SceneCollaborationFeedOptions['sessionStatus']) {
+  if (sessionStatus === 'ready') {
+    return 'prompt backend linked';
+  }
+  if (sessionStatus === 'syncing') {
+    return 'prompt session syncing';
+  }
 
-    return () => clearInterval(intervalId);
-  }, [events]);
+  return 'local session only';
+}
 
+function getSyncDetail(mode: Mode, sessionStatus: SceneCollaborationFeedOptions['sessionStatus']) {
+  if (sessionStatus === 'ready') {
+    return `Scene ${mode} is linked to the prompt backend. Activity status remains local-only because no collaboration transport is connected.`;
+  }
+  if (sessionStatus === 'syncing') {
+    return `Scene ${mode} is preparing the prompt session. Activity status is still local-only.`;
+  }
+
+  return `Scene ${mode} is running in local-only mode. No collaboration transport is connected.`;
+}
+
+function buildLatestEvent(
+  mode: Mode,
+  {
+    latestActivityAt,
+    latestActivityLabel,
+    pendingHistoryCount = 0,
+    runtimeSummary,
+    sessionStatus = 'offline',
+  }: SceneCollaborationFeedOptions,
+): SceneCollaborationEvent {
+  if (latestActivityLabel?.trim()) {
+    return {
+      actorId: 'local-creator',
+      id: `${mode}-latest-activity`,
+      label:
+        pendingHistoryCount > 0
+          ? `Queued local note: ${latestActivityLabel}`
+          : `Latest editor note: ${latestActivityLabel}`,
+      relativeTimeLabel: formatRelativeTime(latestActivityAt),
+    };
+  }
+
+  if (runtimeSummary?.trim()) {
+    return {
+      actorId: 'local-creator',
+      id: `${mode}-runtime-activity`,
+      label: `Latest scene runtime: ${runtimeSummary}`,
+      relativeTimeLabel: formatRelativeTime(latestActivityAt),
+    };
+  }
+
+  return {
+    actorId: 'local-creator',
+    id: `${mode}-local-status`,
+    label:
+      sessionStatus === 'ready'
+        ? 'Prompt backend linked. No local editor activity has been recorded yet.'
+        : 'No local editor activity recorded yet.',
+    relativeTimeLabel: 'just now',
+  };
+}
+
+export function useSceneCollaborationFeed(
+  mode: Mode,
+  collaborators: ActiveUser[],
+  options: SceneCollaborationFeedOptions = {},
+) {
   return useMemo<SceneCollaborationFeed>(() => {
-    const latestEvent = events[eventIndex] ?? events[0];
-    const activeCollaborators = collaborators.map(collaborator => {
-      const profile = COLLABORATOR_PROFILES[collaborator.id] ?? COLLABORATOR_PROFILES.u3;
-      const isActor = collaborator.id === latestEvent.actorId;
-
-      return {
-        ...collaborator,
-        currentAction: isActor ? latestEvent.label : profile.currentAction,
-        isOnline: collaborator.id === 'local-creator' ? true : collaborator.id !== 'u2' || isActor,
-        roleLabel: profile.roleLabel,
-        status: isActor ? 'editing' : profile.status,
+    const localUser =
+      collaborators.find(collaborator => collaborator.id === 'local-creator') ?? {
+        id: 'local-creator',
+        isOnline: true,
+        name: 'You',
       };
-    });
+    const latestEvent = buildLatestEvent(mode, options);
+    const activeCollaborators: SceneCollaboratorPresence[] = [
+      {
+        ...localUser,
+        currentAction: latestEvent.label,
+        isOnline: true,
+        roleLabel: 'You',
+        status: options.pendingHistoryCount && options.pendingHistoryCount > 0 ? 'editing' : 'watching',
+      },
+    ];
 
     return {
-      activeCollaborators: activeCollaborators.filter(collaborator => collaborator.isOnline),
+      activeCollaborators,
       latestEvent,
       socket: {
-        channel: `scene.${mode}.presence`,
-        latencyMs: 28 + eventIndex * 4,
-        stateLabel: 'websocket live',
+        channel: getSyncDetail(mode, options.sessionStatus),
+        latencyMs: null,
+        stateLabel: getSyncStateLabel(options.sessionStatus),
       },
     };
-  }, [collaborators, eventIndex, events, mode]);
+  }, [collaborators, mode, options]);
 }

@@ -1,10 +1,21 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
 
 import GlassSurface from '@/components/glass-surface';
+import {
+  fetchPromptMessages,
+  type PromptMessageRecord,
+  PromptSessionApiError,
+} from '@/lib/api/prompt-session';
 import { getEditorPalette } from '@/lib/editor/editor-palette';
-import { formatTokenCount, getPromptTelemetryMock } from '@/lib/editor/prompt-telemetry';
 import { getSceneOption, resolveMode } from '@/lib/scene-config';
+
+type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+
+function toSingleParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function formatHistoryTime(timestamp: string) {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -13,18 +24,136 @@ function formatHistoryTime(timestamp: string) {
   });
 }
 
+function extractErrorMessage(error: unknown) {
+  if (error instanceof PromptSessionApiError) {
+    return error.message;
+  }
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return 'Prompt history is unavailable right now.';
+}
+
+function formatRoleLabel(role: PromptMessageRecord['role']) {
+  if (role === 'assistant') {
+    return 'Assistant';
+  }
+  if (role === 'tool') {
+    return 'Tool';
+  }
+
+  return 'You';
+}
+
+function formatSourceLabel(source: PromptMessageRecord['source']) {
+  if (source === 'codex') {
+    return 'codex';
+  }
+  if (source === 'transcript') {
+    return 'transcript';
+  }
+
+  return source;
+}
+
+function buildMessageMeta(message: PromptMessageRecord) {
+  const parts = [formatRoleLabel(message.role), formatSourceLabel(message.source)];
+  if (message.slot) {
+    parts.push(message.slot);
+  }
+
+  return parts.join(' · ');
+}
+
 export default function PromptHistoryScreen() {
   const params = useLocalSearchParams<{
     mode?: string | string[];
+    promptSessionId?: string | string[];
+    sceneDraftId?: string | string[];
     title?: string | string[];
   }>();
-  const mode = resolveMode(Array.isArray(params.mode) ? params.mode[0] : params.mode);
-  const draftTitle = Array.isArray(params.title) ? params.title[0] : params.title;
-  const telemetry = getPromptTelemetryMock(mode);
+  const mode = resolveMode(toSingleParam(params.mode));
+  const promptSessionId = toSingleParam(params.promptSessionId);
+  const sceneDraftId = toSingleParam(params.sceneDraftId);
+  const draftTitle = toSingleParam(params.title);
   const scene = getSceneOption(mode);
   const colorScheme = useColorScheme();
   const palette = getEditorPalette(colorScheme);
   const displayTitle = draftTitle?.trim() ? draftTitle : scene.label;
+  const [messages, setMessages] = useState<PromptMessageRecord[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>(promptSessionId ? 'loading' : 'idle');
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!promptSessionId) {
+      setMessages([]);
+      setLoadError(null);
+      setLoadState('idle');
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    setLoadState('loading');
+    setLoadError(null);
+
+    void fetchPromptMessages(promptSessionId)
+      .then(response => {
+        if (isCancelled) {
+          return;
+        }
+
+        setMessages(
+          [...response].sort(
+            (left, right) =>
+              new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+          ),
+        );
+        setLoadState('ready');
+      })
+      .catch(error => {
+        if (isCancelled) {
+          return;
+        }
+
+        setMessages([]);
+        setLoadError(extractErrorMessage(error));
+        setLoadState('error');
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [promptSessionId]);
+
+  const metrics = useMemo(() => {
+    const total = messages.length;
+    const user = messages.filter(message => message.role === 'user').length;
+    const assistant = messages.filter(message => message.role === 'assistant').length;
+
+    return {
+      assistant,
+      total,
+      user,
+    };
+  }, [messages]);
+
+  const heroSubtitle = useMemo(() => {
+    if (!promptSessionId) {
+      return 'This draft has not linked a backend prompt session yet. Prompt history stays local until the editor opens a real session.';
+    }
+    if (loadState === 'error') {
+      return `${loadError ?? 'Prompt history is unavailable right now.'} Real token usage and service traces are still unavailable because the backend does not emit them yet.`;
+    }
+    if (loadState === 'loading') {
+      return 'Loading real prompt messages for the linked session. Token usage and service traces are not available yet.';
+    }
+
+    return 'Showing real prompt messages from the linked backend session. Token usage and service traces are not available yet because the backend does not emit them.';
+  }, [loadError, loadState, promptSessionId]);
 
   return (
     <>
@@ -41,77 +170,101 @@ export default function PromptHistoryScreen() {
             {displayTitle}
           </Text>
           <Text selectable style={[styles.subtitle, { color: palette.mutedText }]}>
-            Mock prompt telemetry for the ongoing scene editor. Replace this layer with real run
-            events when the backend starts emitting token usage and service traces.
+            {heroSubtitle}
           </Text>
 
           <View style={styles.metricRow}>
             <View style={[styles.metricCard, { backgroundColor: palette.chip }]}>
-              <Text style={[styles.metricLabel, { color: palette.mutedText }]}>Session total</Text>
+              <Text style={[styles.metricLabel, { color: palette.mutedText }]}>Messages</Text>
               <Text selectable style={[styles.metricValue, { color: palette.strongText }]}>
-                {formatTokenCount(telemetry.sessionUsage.total)}
+                {metrics.total}
               </Text>
             </View>
             <View style={[styles.metricCard, { backgroundColor: palette.chip }]}>
-              <Text style={[styles.metricLabel, { color: palette.mutedText }]}>Cached</Text>
+              <Text style={[styles.metricLabel, { color: palette.mutedText }]}>User</Text>
               <Text selectable style={[styles.metricValue, { color: palette.strongText }]}>
-                {formatTokenCount(telemetry.sessionUsage.cached)}
+                {metrics.user}
               </Text>
             </View>
             <View style={[styles.metricCard, { backgroundColor: palette.accentMuted }]}>
-              <Text style={[styles.metricLabel, { color: palette.mutedText }]}>Queue</Text>
+              <Text style={[styles.metricLabel, { color: palette.mutedText }]}>Assistant</Text>
               <Text selectable style={[styles.metricValue, { color: palette.strongText }]}>
-                {telemetry.queueDepth}
+                {metrics.assistant}
               </Text>
             </View>
           </View>
+
+          <View style={styles.sessionMetaRow}>
+            <Text selectable style={[styles.sessionMeta, { color: palette.mutedText }]}>
+              Session {promptSessionId ?? 'not linked'}
+            </Text>
+            <Text selectable style={[styles.sessionMeta, { color: palette.mutedText }]}>
+              Draft {sceneDraftId ?? 'standalone'}
+            </Text>
+          </View>
         </GlassSurface>
 
-        <View style={styles.list}>
-          {[telemetry.activeRun, ...telemetry.recentRuns].map(run => (
-            <GlassSurface
-              key={run.id}
-              style={[styles.runCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <View style={styles.runHeader}>
-                <View style={styles.runCopy}>
-                  <Text selectable style={[styles.runTitle, { color: palette.strongText }]}>
-                    {run.title}
-                  </Text>
-                  <Text selectable style={[styles.runMeta, { color: palette.mutedText }]}>
-                    {run.agent} · {run.slot} · {run.status}
+        {!promptSessionId ? (
+          <GlassSurface style={[styles.noticeCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <Text style={[styles.noticeTitle, { color: palette.strongText }]}>Local draft only</Text>
+            <Text style={[styles.noticeBody, { color: palette.mutedText }]}>
+              Open the editor with a reachable backend and send a prompt to start a persistent prompt session for this draft.
+            </Text>
+          </GlassSurface>
+        ) : null}
+
+        {loadState === 'loading' ? (
+          <GlassSurface style={[styles.noticeCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <Text style={[styles.noticeTitle, { color: palette.strongText }]}>Loading prompt messages</Text>
+            <Text style={[styles.noticeBody, { color: palette.mutedText }]}>
+              Fetching the linked session history from the backend.
+            </Text>
+          </GlassSurface>
+        ) : null}
+
+        {loadState === 'error' ? (
+          <GlassSurface style={[styles.noticeCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <Text style={[styles.noticeTitle, { color: palette.strongText }]}>Prompt history unavailable</Text>
+            <Text style={[styles.noticeBody, { color: palette.mutedText }]}>{loadError}</Text>
+          </GlassSurface>
+        ) : null}
+
+        {loadState === 'ready' && messages.length === 0 ? (
+          <GlassSurface style={[styles.noticeCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <Text style={[styles.noticeTitle, { color: palette.strongText }]}>No prompt messages yet</Text>
+            <Text style={[styles.noticeBody, { color: palette.mutedText }]}>
+              The session is linked, but no messages have been recorded yet.
+            </Text>
+          </GlassSurface>
+        ) : null}
+
+        {loadState === 'ready' && messages.length > 0 ? (
+          <View style={styles.list}>
+            {messages.map(message => (
+              <GlassSurface
+                key={message.id}
+                style={[styles.messageCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+                <View style={styles.messageHeader}>
+                  <View style={styles.messageCopy}>
+                    <Text selectable style={[styles.messageTitle, { color: palette.strongText }]}>
+                      {formatRoleLabel(message.role)}
+                    </Text>
+                    <Text selectable style={[styles.messageMeta, { color: palette.mutedText }]}>
+                      {buildMessageMeta(message)}
+                    </Text>
+                  </View>
+                  <Text selectable style={[styles.messageTime, { color: palette.mutedText }]}>
+                    {formatHistoryTime(message.createdAt)}
                   </Text>
                 </View>
-                <Text selectable style={[styles.runTime, { color: palette.mutedText }]}>
-                  {formatHistoryTime(run.createdAt)}
+
+                <Text selectable style={[styles.messageBody, { color: palette.strongText }]}>
+                  {message.text}
                 </Text>
-              </View>
-
-              <Text selectable style={[styles.promptBody, { color: palette.strongText }]}>
-                {run.prompt}
-              </Text>
-              <Text selectable style={[styles.responseBody, { color: palette.mutedText }]}>
-                {run.responsePreview}
-              </Text>
-
-              <View style={styles.footerRow}>
-                <View style={styles.serviceRow}>
-                  {run.serviceLabels.map(label => (
-                    <View key={label} style={[styles.serviceChip, { backgroundColor: palette.chip }]}>
-                      <Text selectable style={[styles.serviceText, { color: palette.strongText }]}>
-                        {label}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
-                <Text selectable style={[styles.usageLabel, { color: palette.mutedText }]}>
-                  in {formatTokenCount(run.usage.input)} · out {formatTokenCount(run.usage.output)} · total{' '}
-                  {formatTokenCount(run.usage.total)}
-                </Text>
-              </View>
-            </GlassSurface>
-          ))}
-        </View>
+              </GlassSurface>
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
 
       <Stack.Screen
@@ -129,9 +282,9 @@ const styles = StyleSheet.create({
   content: {
     gap: 14,
     minHeight: '100%',
+    paddingBottom: 24,
     paddingHorizontal: 18,
     paddingTop: 96,
-    paddingBottom: 24,
   },
   heroCard: {
     borderRadius: 28,
@@ -176,64 +329,63 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  sessionMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  sessionMeta: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noticeCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  noticeTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  noticeBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
   list: {
     gap: 10,
   },
-  runCard: {
+  messageCard: {
     borderRadius: 24,
     borderWidth: 1,
     gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  runHeader: {
+  messageHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
   },
-  runCopy: {
+  messageCopy: {
     flex: 1,
     gap: 4,
   },
-  runTitle: {
+  messageTitle: {
     fontSize: 17,
     fontWeight: '700',
   },
-  runMeta: {
+  messageMeta: {
     fontSize: 12,
   },
-  runTime: {
+  messageTime: {
     fontSize: 12,
     fontWeight: '600',
   },
-  promptBody: {
+  messageBody: {
     fontSize: 15,
     lineHeight: 20,
-  },
-  responseBody: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  footerRow: {
-    gap: 8,
-  },
-  serviceRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  serviceChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  serviceText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  usageLabel: {
-    fontSize: 12,
-    fontWeight: '600',
   },
 });

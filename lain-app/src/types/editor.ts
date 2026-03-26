@@ -5,7 +5,16 @@ export type ActiveUser = {
   isOnline: boolean;
 };
 
+export type AssistantId = 'codex' | 'claude' | 'gpt-5' | 'gemini';
+
 export type SlotHint = 'walk' | 'kill' | 'seed' | 'idle';
+
+export type EditorPreferences = {
+  defaultSlotHint: SlotHint;
+  preferredAssistantId: AssistantId;
+  showPromptHistoryPreview: boolean;
+  showStatusPills: boolean;
+};
 
 export type HistoryEntry = {
   id: string;
@@ -15,6 +24,7 @@ export type HistoryEntry = {
   slot?: SlotHint;
   type: 'voice' | 'text' | 'photo' | 'asset';
   audioUri?: string;
+  syncStatus?: 'failed' | 'queued' | 'synced';
 };
 
 export type AssetSourceType = 'google_drive' | 'poly_pizza' | 'sketchfab' | 'upload';
