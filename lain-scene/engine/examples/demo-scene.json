@@ -1,0 +1,206 @@
+{
+  "$schema": "https://lain.dev/schemas/scene-document-v1.json",
+  "version": 1,
+  "metadata": {
+    "id": "demo-scene",
+    "title": "Demo Scene",
+    "engine": "dsl-runtime",
+    "inputModel": "tap",
+    "platforms": [
+      "web"
+    ],
+    "status": "draft"
+  },
+  "environment": {
+    "clearColor": {
+      "r": 0.05,
+      "g": 0.05,
+      "b": 0.09,
+      "a": 1
+    },
+    "camera": {
+      "type": "arc-rotate",
+      "position": {
+        "x": 0,
+        "y": 5,
+        "z": -11
+      },
+      "target": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "fov": 0.8
+    },
+    "fog": {
+      "mode": "exp2",
+      "color": {
+        "r": 0.2,
+        "g": 0.1,
+        "b": 0.14
+      },
+      "density": 0.025
+    },
+    "postProcessing": {
+      "bloom": false,
+      "fxaa": false,
+      "vignette": false
+    }
+  },
+  "materials": {
+    "ground-mat": {
+      "id": "ground-mat",
+      "type": "standard",
+      "diffuseColor": {
+        "r": 0.22,
+        "g": 0.18,
+        "b": 0.16
+      },
+      "emissiveColor": {
+        "r": 0.02,
+        "g": 0.02,
+        "b": 0.02
+      },
+      "alpha": 1,
+      "config": {}
+    },
+    "hero-mat": {
+      "id": "hero-mat",
+      "type": "standard",
+      "diffuseColor": {
+        "r": 0.8,
+        "g": 0.24,
+        "b": 0.28
+      },
+      "emissiveColor": {
+        "r": 0.1,
+        "g": 0.03,
+        "b": 0.03
+      },
+      "alpha": 1,
+      "config": {}
+    }
+  },
+  "entities": {
+    "ground": {
+      "id": "ground",
+      "type": "mesh",
+      "shape": "ground",
+      "width": 18,
+      "height": 18,
+      "position": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "materialRef": "ground-mat",
+      "visible": true,
+      "tags": [
+        "floor"
+      ]
+    },
+    "sun": {
+      "id": "sun",
+      "type": "light",
+      "lightType": "hemispheric",
+      "position": {
+        "x": 0,
+        "y": 6,
+        "z": -2
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "visible": true,
+      "tags": [],
+      "intensity": 0.95,
+      "color": {
+        "r": 1,
+        "g": 0.94,
+        "b": 0.9
+      }
+    },
+    "hero": {
+      "id": "hero",
+      "type": "mesh",
+      "shape": "box",
+      "width": 1.5,
+      "height": 2.4,
+      "depth": 1.1,
+      "position": {
+        "x": 0,
+        "y": 1.2,
+        "z": 0
+      },
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "scale": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "materialRef": "hero-mat",
+      "visible": true,
+      "tags": [
+        "target"
+      ]
+    }
+  },
+  "animations": {
+    "hero-bob": {
+      "id": "hero-bob",
+      "targetRef": "hero",
+      "property": "position.y",
+      "loop": true,
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": 1.2
+        },
+        {
+          "frame": 15,
+          "value": 1.45
+        },
+        {
+          "frame": 30,
+          "value": 1.2
+        }
+      ]
+    }
+  },
+  "audio": {},
+  "interactions": {
+    "hero-click": {
+      "id": "hero-click",
+      "trigger": "pointer-down",
+      "action": "toggle-visibility",
+      "targetRef": "hero",
+      "params": {
+        "entityId": "hero"
+      }
+    }
+  },
+  "stateMachines": {},
+  "scripts": {}
+}
+

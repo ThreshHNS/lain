@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>lain DSL runtime</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Arial Narrow", Arial, sans-serif;
+        --panel-bg: rgba(14, 12, 16, 0.8);
+        --panel-border: rgba(255, 255, 255, 0.12);
+        --panel-text: #f6e5d5;
+        --panel-muted: #c4b1a4;
+        --accent: #ff8d5c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top, rgba(255, 141, 92, 0.2), transparent 30%),
+          linear-gradient(180deg, #17141a 0%, #050506 100%);
+        color: var(--panel-text);
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      #renderCanvas {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        touch-action: none;
+      }
+
+      .hud {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        width: min(360px, calc(100vw - 32px));
+        padding: 16px 18px;
+        border: 1px solid var(--panel-border);
+        border-radius: 18px;
+        background: var(--panel-bg);
+        backdrop-filter: blur(14px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+        z-index: 2;
+      }
+
+      .hud h1 {
+        margin: 0 0 4px;
+        font-size: 20px;
+      }
+
+      .hud p {
+        margin: 0 0 12px;
+        color: var(--panel-muted);
+        line-height: 1.4;
+        font-size: 13px;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .meta div {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .meta strong,
+      .meta span {
+        display: block;
+      }
+
+      .meta strong {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--panel-muted);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+      }
+
+      .meta span {
+        font-size: 14px;
+      }
+
+      .status {
+        margin: 0;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .status strong {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body data-runtime-state="booting">
+    <aside class="hud">
+      <h1>DSL Runtime</h1>
+      <p>Loads `SceneDocument` JSON from a query param or `postMessage` and interprets it into Babylon.js.</p>
+      <section class="meta">
+        <div>
+          <strong>Scene</strong>
+          <span id="sceneId">booting</span>
+        </div>
+        <div>
+          <strong>Entities</strong>
+          <span id="entityCount">0</span>
+        </div>
+      </section>
+      <p class="status" id="statusText"><strong>Status:</strong> waiting for scene document</p>
+    </aside>
+    <canvas id="renderCanvas"></canvas>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script type="module">
+      import { SceneDSLRuntime } from './dsl-runtime.js';
+
+      const params = new URLSearchParams(window.location.search);
+      const canvas = document.getElementById('renderCanvas');
+      const sceneIdNode = document.getElementById('sceneId');
+      const entityCountNode = document.getElementById('entityCount');
+      const statusNode = document.getElementById('statusText');
+      const runtime = new SceneDSLRuntime(canvas);
+
+      function postBridgeMessage(payload) {
+        const serialized = JSON.stringify(payload);
+        if (window.ReactNativeWebView?.postMessage) {
+          window.ReactNativeWebView.postMessage(serialized);
+        }
+        window.parent?.postMessage?.(payload, '*');
+      }
+
+      function syncState(nextState, statusLabel = 'ready') {
+        document.body.dataset.runtimeState = statusLabel;
+        sceneIdNode.textContent = nextState.sceneId || 'none';
+        entityCountNode.textContent = String(nextState.entityCount || 0);
+        statusNode.innerHTML = `<strong>Status:</strong> ${statusLabel}${nextState.lastError ? ` (${nextState.lastError})` : ''}`;
+        window.__lainTestApi = {
+          getState: () => runtime.getSceneState(),
+          applyPatch: patch => runtime.applyPatch(patch),
+          loadDocument: document => runtime.loadScene(document),
+          emitEvent: (eventName, payload = {}) => runtime.emitEvent(eventName, payload),
+        };
+        postBridgeMessage({
+          type: statusLabel === 'error' ? 'scene-error' : 'scene-state',
+          state: nextState,
+        });
+      }
+
+      async function fetchDocument() {
+        const explicitDocumentUrl = params.get('documentUrl');
+        const sceneId = params.get('scene');
+        let documentUrl = explicitDocumentUrl;
+        if (!documentUrl && sceneId) {
+          documentUrl = `../${sceneId}/scene.json`;
+        }
+        if (!documentUrl) {
+          documentUrl = './examples/demo-scene.json';
+        }
+        const response = await fetch(documentUrl, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Failed to load SceneDocument from ${documentUrl}: ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function loadInitialDocument() {
+        try {
+          const document = await fetchDocument();
+          const state = await runtime.loadScene(document);
+          syncState(state, 'ready');
+          postBridgeMessage({ type: 'scene-ready', sceneId: state.sceneId });
+        } catch (error) {
+          document.body.dataset.runtimeState = 'error';
+          statusNode.innerHTML = `<strong>Status:</strong> error (${error.message})`;
+          postBridgeMessage({
+            type: 'scene-error',
+            errors: [{ message: error.message }],
+          });
+          throw error;
+        }
+      }
+
+      window.addEventListener('message', async event => {
+        const payload = event.data;
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
+        try {
+          if (payload.type === 'scene-load' && payload.document) {
+            const state = await runtime.loadScene(payload.document);
+            syncState(state, 'ready');
+          } else if (payload.type === 'scene-patch' && Array.isArray(payload.patch)) {
+            const state = await runtime.applyPatch(payload.patch);
+            syncState(state, 'ready');
+          } else if (payload.type === 'scene-query' && payload.query === 'getState') {
+            postBridgeMessage({ type: 'scene-state', state: runtime.getSceneState() });
+          }
+        } catch (error) {
+          syncState({ ...runtime.getSceneState(), lastError: error.message }, 'error');
+        }
+      });
+
+      loadInitialDocument();
+    </script>
+  </body>
+</html>
