@@ -1,0 +1,16 @@
+Generate a full SceneDocument JSON object.
+
+Requirements:
+- Return JSON only.
+- metadata.id must equal the current sceneContext.scene.id.
+- metadata.engine must be "dsl-runtime".
+- Stay compatible with the current sceneContext creative/gameplay constraints.
+- Use references consistently: parent refs, material refs, animation target refs, audio target refs, and state machine refs must all resolve.
+- Do not include Babylon.js code.
+
+Current scene context:
+{{SCENE_CONTEXT_JSON}}
+
+Validation feedback from the previous attempt:
+{{VALIDATION_FEEDBACK_JSON}}
+

@@ -1,0 +1,13 @@
+Answer the user question in plain text.
+
+Requirements:
+- Treat this as read-only analysis.
+- Do not invent files, routes, or scene ids.
+- Base the answer on the scene context and current SceneDocument when provided.
+
+Current scene context:
+{{SCENE_CONTEXT_JSON}}
+
+Current SceneDocument:
+{{CURRENT_SCENE_JSON}}
+

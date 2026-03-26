@@ -1,43 +1,21 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.operations import OperationType
+from app.dsl.patch import PatchOperation
+from app.dsl.schema import SceneDocument
+from app.dsl.validators import ValidationDiagnostic
+from app.llm.base import TokenUsage
 
-class AgentStatus(StrEnum):
+
+class RunStatus(StrEnum):
     completed = "completed"
     needs_input = "needs_input"
     blocked = "blocked"
-
-
-class AgentMode(StrEnum):
-    scene_direction = "scene_direction"
-    asset_search = "asset_search"
-    asset_attach = "asset_attach"
-    babylon_code = "babylon_code"
-
-
-class ChangeKind(StrEnum):
-    note = "note"
-    asset = "asset"
-    code = "code"
-
-
-class ToolPlanItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    tool: str
-    intent: str
-
-
-class ChangeRecord(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    kind: ChangeKind = ChangeKind.note
-    path: str | None = None
-    summary: str
-    details: str | None = None
 
 
 class MissingInput(BaseModel):
@@ -47,14 +25,26 @@ class MissingInput(BaseModel):
     reason: str
 
 
+class ToolExecutionRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str
+    summary: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentRunResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    status: AgentStatus
-    mode: AgentMode
+    status: RunStatus
+    operation: OperationType
     summary: str
     userFacingMessage: str
-    toolPlan: list[ToolPlanItem] = Field(default_factory=list)
-    changes: list[ChangeRecord] = Field(default_factory=list)
+    sceneDocument: SceneDocument | None = None
+    patch: list[PatchOperation] = Field(default_factory=list)
+    answer: str | None = None
+    toolResults: list[ToolExecutionRecord] = Field(default_factory=list)
+    diagnostics: list[ValidationDiagnostic] = Field(default_factory=list)
     missingInputs: list[MissingInput] = Field(default_factory=list)
+    usage: TokenUsage | None = None
 

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-import pytest
-
-from app.agent.tools.add_asset import add_asset
-from app.agent.tools.search_assets import search_assets
-from app.agent.tools.upsert_babylon_code import upsert_babylon_code
+from app.dsl.schema import (
+    Color4,
+    Environment,
+    MeshEntity,
+    SceneDocument,
+    SceneMetadata,
+)
+from app.llm.base import LLMResponse, LLMProvider, TokenUsage
 from app.models.scene_context import SceneContext
 
 
@@ -70,6 +74,43 @@ def build_scene_context() -> SceneContext:
     )
 
 
+def build_scene_document() -> SceneDocument:
+    return SceneDocument(
+        metadata=SceneMetadata(
+            id="slasher",
+            title="Slasher",
+            engine="dsl-runtime",
+            inputModel="hold",
+            platforms=["web", "ios-webview"],
+            status="draft",
+        ),
+        environment=Environment(clearColor=Color4(r=0.01, g=0.01, b=0.02, a=1)),
+        entities={
+            "ground": MeshEntity(id="ground", shape="ground", width=12, height=12),
+            "enemy": MeshEntity(id="enemy", shape="box", position={"x": 0, "y": 1, "z": 2}),
+        },
+    )
+
+
+class FakeLLMProvider(LLMProvider):
+    def __init__(self, responses: list[object]) -> None:
+        self._responses = list(responses)
+        self.calls = 0
+
+    @property
+    def model_name(self) -> str:
+        return "fake/test-model"
+
+    async def complete(self, messages, *, temperature=None, max_tokens=None, response_format=None) -> LLMResponse:  # noqa: ANN001
+        self.calls += 1
+        payload = self._responses.pop(0)
+        content = payload if isinstance(payload, str) else json.dumps(payload)
+        return LLMResponse(
+            content=content,
+            usage=TokenUsage(promptTokens=10, completionTokens=20, totalTokens=30),
+        )
+
+
 def seed_repo(tmp_path: Path) -> Path:
     (tmp_path / "lain-scene" / "assets" / "sprites").mkdir(parents=True)
     (tmp_path / "lain-scene" / "slasher").mkdir(parents=True)
@@ -77,43 +118,4 @@ def seed_repo(tmp_path: Path) -> Path:
     (tmp_path / "lain-scene" / "slasher" / "index.html").write_text("<html></html>\n", encoding="utf-8")
     (tmp_path / "lain-scene" / "assets" / "sprites" / "knife.png").write_bytes(b"knife")
     return tmp_path
-
-
-def test_search_assets_prefers_matching_shared_assets(tmp_path: Path) -> None:
-    repo_root = seed_repo(tmp_path)
-    context = build_scene_context()
-
-    results = search_assets(context, repo_root, query="knife sprite", limit=3)
-
-    assert results
-    assert results[0].path == "lain-scene/assets/sprites/knife.png"
-
-
-def test_add_asset_copies_shared_asset_into_scene_scope(tmp_path: Path) -> None:
-    repo_root = seed_repo(tmp_path)
-    context = build_scene_context()
-
-    result = add_asset(
-        context,
-        repo_root,
-        source_path="lain-scene/assets/sprites/knife.png",
-        target_path="assets/enemy-knife.png",
-    )
-
-    assert result.targetPath == "lain-scene/slasher/assets/enemy-knife.png"
-    assert (repo_root / result.targetPath).read_bytes() == b"knife"
-
-
-def test_upsert_babylon_code_rejects_shared_contract_path(tmp_path: Path) -> None:
-    repo_root = seed_repo(tmp_path)
-    context = build_scene_context()
-
-    with pytest.raises(ValueError):
-        upsert_babylon_code(
-            context,
-            repo_root,
-            target_path="lain-scene/index.html",
-            content="<html>bad</html>",
-            summary="bad write",
-        )
 

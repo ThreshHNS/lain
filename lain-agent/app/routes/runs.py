@@ -1,20 +1,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
 
 from app.agent.service import AgentService, get_agent_service
 from app.models.agent_response import AgentRunResponse
-from app.models.scene_context import SceneContext
+from app.models.operations import RunRequest
 
 router = APIRouter()
-
-
-class RunRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sceneContext: SceneContext
-    userPrompt: str = Field(min_length=1)
 
 
 @router.post("/runs", response_model=AgentRunResponse)
@@ -23,7 +15,10 @@ async def run_agent(
     service: AgentService = Depends(get_agent_service),
 ) -> AgentRunResponse:
     return await service.run(
+        operation=request.operation,
         scene_context=request.sceneContext,
         user_prompt=request.userPrompt,
+        current_scene=request.currentScene,
+        conversation_history=request.conversationHistory,
+        operation_params=request.operationParams,
     )
-
